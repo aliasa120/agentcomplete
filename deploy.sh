@@ -28,18 +28,19 @@ if [ ! -f deep-agents-ui-main/.env ]; then
 fi
 
 # ── Export frontend .env vars so docker compose can use them as build args ────
+# sudo -E is required to preserve env vars (plain sudo would strip them)
 set -a
 source deep-agents-ui-main/.env
 set +a
 
 # ── Stop existing containers ──────────────────────────────────────────────────
 echo "🛑 Stopping existing containers..."
-sudo docker compose down 2>/dev/null || true
+sudo -E docker compose down 2>/dev/null || true
 
 # ── Build & start both services ───────────────────────────────────────────────
 echo ""
 echo "🐳 Building and starting Backend + Frontend..."
-sudo docker compose up --build -d
+sudo -E docker compose up --build -d
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
