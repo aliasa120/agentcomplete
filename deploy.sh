@@ -4,8 +4,8 @@ set -e
 echo "🚀 Deploying Agent App (Backend + Frontend)..."
 echo ""
 
-# ── Go to project directory ──────────────────────────────────────────────────
-cd /home/admin/agentbackend
+# ── Go to the directory where this script lives ──────────────────────────────
+cd "$(dirname "$0")"
 
 # ── Pull latest code ─────────────────────────────────────────────────────────
 echo "📥 Pulling latest code..."
