@@ -299,8 +299,7 @@ Character count: [X/280]
 - First line MUST grab attention (this is what users see in preview)
 - Use emojis to break up text
 - Include 5-10 relevant hashtags at the end
-- Suggest image concept in brackets
-- Ask question or encourage engagement
+- End with an engagement question — NO image suggestion (images are generated separately)
 
 **Structure:**
 ```
@@ -312,8 +311,6 @@ Character count: [X/280]
 
 [Call to action/question]
 
-[Image suggestion in brackets]
-
 [Hashtags]
 ```
 
@@ -321,15 +318,13 @@ Character count: [X/280]
 
 **Good Example:**
 ```
-What's the real story behind the latest controversy?
+What's the real story behind the latest controversy? 🔍
 
-Opposition alliance TTAP and Imran Khan's family are challenging the government's version of events regarding his medical examination. 
+Opposition alliance TTAP and Imran Khan's family are challenging the government's version of events regarding his medical examination.
 
 Interior Minister Naqvi presented one account, but TTAP calls it "incomplete and misleading."
 
-What's your take on these conflicting narratives? Share below
-
-[Image concept: Split screen showing Naqvi press conference on left, TTAP protest on right with text overlay "Conflicting Accounts"]
+What's your take on these conflicting narratives? Share below 👇
 
 #ImranKhan #PakistanPolitics #BreakingNews #PoliticalNews #CurrentAffairs #NewsUpdate
 ```
@@ -347,8 +342,6 @@ Here is some news about politics. The opposition and government disagree about s
 ## Instagram Post
 
 [Your caption here]
-
-**Image Suggestion:** [Specific visual description]
 ```
 
 ---
@@ -1183,8 +1176,7 @@ Write the three posts internally first (do NOT save yet).
 - First line must grab attention (preview line)
 - Use emojis to break up text
 - 5-10 relevant hashtags at the end
-- Suggest image concept in brackets
-- End with engagement question
+- End with an engagement question — **NO image suggestion**, images are generated separately
 
 #### Platform 3: Facebook
 - **100-250 words**, complete paragraphs, natural flow
@@ -1194,6 +1186,113 @@ Write the three posts internally first (do NOT save yet).
 - Optional: "Read more: [link]"
 
 ---
+
+### 📚 THE ECHO — Niche Writing Examples
+
+Before you write, study the examples below that match the current news type.
+These define THE ECHO's voice: factual, sharp, never generic.
+Match their hook intensity, quote style, sentence rhythm, and depth.
+
+---
+
+**⚔️ Political / Breaking**
+
+*X:* `Aleema Khan: "His eye is still 90% not healed — we haven't received a single detailed medical report." PTI founder's family demands transfer to Shifa International. Petition filed in Supreme Court. #ImranKhan` *(263/280)*
+
+*Instagram:* `A family's desperate plea — or a political chess move? ♿️
+
+Aleema Khan revealed Imran Khan's eye condition has shown zero improvement after months behind bars. The government dismisses their chosen doctors — the family calls it a transparency crisis.
+
+"We are worried his second eye may also be impacted."
+
+Should political prisoners have independent medical access? 👇
+
+#ImranKhan #PTI #Pakistan #BreakingNews #HumanRights #AdialaJail`
+
+*Facebook:* `Aleema Khan raised alarming concerns about her brother Imran Khan's deteriorating eyesight outside Rawalpindi's Anti-Terrorism Court on Tuesday.
+
+Speaking alongside lawyer Faisal Malik, Aleema said the PTI founder's eye "has not improved" since his last check-up and remains "90 percent unhealed." The family has yet to receive a comprehensive medical report, demanding Imran Khan's immediate transfer to Shifa International Hospital.
+
+The situation has deepened into a transparency dispute: when the family recommended specific doctors, the government rejected them and sent its own medical team. One government-appointed doctor — originally suggested by the family — cut off contact with their medical team entirely.
+
+Senior lawyer Latif Khosa has filed a petition in the Supreme Court seeking independent medical access.
+
+Does political status override a prisoner's right to independent healthcare? Tell us in the comments.`
+
+---
+
+**💰 Economy / Finance / Global Markets**
+
+*X:* `Gold ▼1.4% to $5,252 as a surging dollar outweighs safe-haven demand. Hormuz closure fears push oil +6%. Fed rate-cut odds shrink — June hold now above 60%. #Gold #Oil #Markets` *(231/280)*
+
+*Instagram:* `War premium hits markets 📉
+
+Gold fell 1.4% despite a raging Middle East conflict — because traders fear the war means HIGHER INFLATION and HIGHER rates, not lower ones.
+
+Add to that: Iran declaring the Strait of Hormuz closed. Oil soared 6%.
+
+Safe havens aren't so safe when the Fed stays hawkish. What does this mean for your savings? 👇
+
+#GoldPrice #OilMarkets #MiddleEast #Iran #Economy #Finance #Inflation`
+
+*Facebook:* `Spot gold fell 1.4% to $5,252 per ounce on Tuesday despite an intensifying conflict — because markets are now pricing in something more painful than war: higher inflation and higher interest rates for longer.
+
+"The price decline is likely due to the market placing greater weight on the inflationary risks from the war, and therefore raising interest rate expectations," said Commerzbank analyst Thu Lan Nguyen.
+
+Iran's Strait of Hormuz closure announcement sent shockwaves through energy markets. Global shipping rates surged and crude oil jumped 6%. The U.S. Fed is expected to hold rates at its March 18 meeting, with June hold odds now above 60% — a sharp reversal from below 45% just days prior.
+
+How are you protecting your wealth in this environment?`
+
+---
+
+**🚫 Tragedy / Disaster / Humanitarian**
+
+*X:* `Strike on a girls’ elementary school in southern Iran: 148 students killed, nearly 100 wounded.
+Neither the U.S. nor Israel confirmed any such attack. #Iran #BreakingNews` *(215/280)*
+
+*Instagram:* `148 children. A school. Gone. 💔
+
+Mourners buried students killed in a strike on a girls’ elementary school in Minab, southern Iran. Nearly 100 more were wounded.
+
+Neither the United States nor Israel acknowledged any attack on any school.
+
+When wars reach classrooms, who is held accountable? 👇
+
+#Iran #Children #BreakingNews #War #ChildrenOfWar #HumanCost #Justice`
+
+*Facebook:* `Mourners gathered Tuesday to bury children killed in a strike on the Shajareh Tayyebeh girls’ elementary school in Minab, southern Iran. At least 148 students were killed and nearly 100 others wounded.
+
+Neither the United States nor Israel confirmed any involvement. Israel's military said it was "not aware" of any strike on any school in Iran.
+
+As conflict expands, attacks on civilian infrastructure have become a defining and deeply disturbing trend. The identities of those responsible remain contested. The parents of 148 students cannot contest anything anymore.
+
+Do civilian sites need stronger international protection in modern warfare?`
+
+---
+
+**🌐 General / Diplomatic / Situation Update**
+
+*X:* `DPM Dar confirms Pakistan's defence pact with Saudi Arabia was directly communicated to Iran’s FM Araghchi. PIA flights operating via Oman. Saudi Arabia "relatively stable." #Pakistan #MiddleEast` *(237/280)*
+
+*Instagram:* `Pakistan's quiet diplomacy in a region on fire 🇵🇰
+
+DPM Ishaq Dar ran "shuttle communication" between Riyadh and Tehran, reminding Iran’s FM of Pakistan’s defence commitment to Saudi Arabia.
+
+Result? "Minimum" Iranian response directed at Saudi Arabia, Dar says.
+
+With 2.5 million Pakistanis in Saudi Arabia, this isn’t just politics — it’s personal.
+
+Is Pakistan doing enough to protect its diaspora? 👇
+
+#Pakistan #SaudiArabia #Iran #IshaqDar #MiddleEastCrisis #Diaspora`
+
+*Facebook:* `Deputy Prime Minister Ishaq Dar confirmed Tuesday that Pakistan has been actively running "shuttle communication" between Saudi Arabia and Iran, leveraging Islamabad’s unique position as a Riyadh ally to reduce tensions.
+
+Dar said he personally reminded Iranian FM Abbas Araghchi of Pakistan’s defence pact with Saudi Arabia. He described the Saudi situation as “relatively stable" — noting that Iranian response toward the kingdom was "minimum" as a result.
+
+With approximately 2.5 million Pakistani nationals living in Saudi Arabia, the stakes are deeply personal. PIA flights continue to operate via Oman’s airspace for those wishing to return.
+
+Is Pakistan’s quiet diplomacy an underrated strength in regional crisis management?`
 
 ### Step 6b — Self-Score Each Post (before saving)
 
@@ -1262,58 +1361,65 @@ After seeing all images, use `think_tool` to record:
 
 ### Step 7d — Create the Social Post Image
 
-**Before** calling `create_post_image_gemini`, write a vivid, **story-specific** `editing_prompt`.
+**Before** calling `create_post_image_gemini`, classify the news type first, then pick the matching THE ECHO brand style.
 
-#### Pick Your Layout (choose the best fit from the 20 below):
+---
 
-| # | Layout Name | Style Description |
+#### THE ECHO — Brand Identity
+
+**Brand:** THE ECHO | **Website watermark:** `theecho.news.tv`
+**Primary:** Deep Teal `#1A5C5A` | **Highlight:** Warm Mustard `#C9A227` | **Text Light:** `#FFFFFF` | **Card Dark:** `#0D1F1E`
+**Headline font feel:** Clean bold **serif** (high-authority) | **Kicker / sub-info:** Modern geometric sans-serif
+**Brand icon position:** Top-left — stylized globe/echo-wave mark (`THE ECHO` wordmark)
+
+---
+
+#### News-Type → Style Selection Guide
+
+| News Type | THE ECHO Style to Use | Key Visual Feel |
 |---|---|---|
-| 1 | **ARY Breaking Red** | White card bottom 28%, bold red left accent bar, red kicker badge, dark headline, red bottom strip |
-| 2 | **BBC Minimal White** | Pure white semi-transparent card, bold black headline, "BREAKING" in small red badge top-left |
-| 3 | **CNN Dark Gradient** | Heavy black gradient bottom 35%, bold white headline, white teaser below, red CNN-style kicker tag |
-| 4 | **Al Jazeera Yellow Frame** | Thin yellow accent frame on bottom card, dark card, white headline, yellow kicker square badge |
-| 5 | **Bloomberg Gold Finance** | Dark navy gradient bottom, gold kicker line, bold white headline, grey monospace spice line |
-| 6 | **Sports Energy Green** | Diagonal lime-green slash overlay on bottom, white italic headline, neon glow on text |
-| 7 | **Sports Energy Red** | Diagonal red slash, white bold headline, thin scoreboard-style data strip at very bottom |
-| 8 | **Election Blue** | Deep navy card bottom 32%, election-blue left accent bar, bold white headline, italic white teaser |
-| 9 | **Geo Pakistan Style** | Green bottom card, white headline, green left accent bar, orange-red breaking kicker |
-| 10 | **Dawn Minimal Grey** | Pale grey semi-transparent card, dark serif-feel headline, thin black accent bar, small timestamp |
-| 11 | **Instagram Centered Dark** | Dark semi-transparent bands top+bottom, bold white headline centered in middle of image |
-| 12 | **Disaster/Humanitarian Black** | Dark desaturated full-bottom overlay, white serif headline, muted red "URGENT" kicker |
-| 13 | **Neon Cyber** | Glowing cyan/purple neon kicker badge, dark glass card, bold white headline, futuristic feel |
-| 14 | **Science Tech Teal** | Dark teal gradient, monospace kicker, bold white headline, blue accent line |
-| 15 | **Finance Green** | Forest green card, gold accent bar, white headline with highlighted numbers |
-| 16 | **Warm Editorial Orange** | Amber/orange gradient, white serif headline, cream italic spice line, magazine editorial feel |
-| 17 | **Investigation Dark** | Dramatic dark vignette, red "INVESTIGATION" badge top-left, large white headline centered |
-| 18 | **Military Khaki** | Dark olive card, tactical font feel, yellow kicker "DEVELOPING", bold white headline |
-| 19 | **Health Medical Blue** | Clean white card, blue accent cross icon area, dark blue headline, reassuring clean tone |
-| 20 | **Viral Trending Gradient** | Eye-catching purple-pink gradient card, bold outlined white headline, 🔥 TRENDING kicker |
+| Breaking / Hard News | **Style 1 — Gritty Ground-Level** | Real photo dominant, gradient bottom overlay, white serif headline directly on image, deep teal kicker bar |
+| Quote / Interview / Controversy | **Style 2 — Portrait Gradient** | Close-up face photo, dark gradient background, bold sans-serif headline, mustard highlight on key words |
+| Feature / Natural / Science | **Style 3 — Clean Container** | Wide cinematic shot, white/teal rounded text block at bottom, high readability, teal accent bar |
+| Tabloid / Opinion / Geo-political Drama | **Style 4 — Composite Dramatic** | Multiple image layers, bold all-caps headline, yellow/red word highlights, distressed textures |
+| Tech / Environment / Niche Brand | **Style 5 — Cinematic Branded** | High-angle sunset/dramatic shot, black text block with teal single-bar accent, crescent icon if Pakistan-specific |
+| Disaster / Grief / Humanitarian | **Style 6 — Immersive Dark Band** | Full-width dark band top+bottom, white serif centered headline, image fills middle — sombre, respectful tone |
 
-#### Your editing_prompt MUST include 3 text layers:
+---
 
-1. **KICKER** (2-4 words, small caps, above headline): e.g. `BREAKING NEWS` · `COURT RULING` · `EXCLUSIVE` · `DEVELOPING` · `LIVE UPDATE` · `OFFICIAL STATEMENT`
-2. **HEADLINE** (bold, large): Hook line from your X post — max 10 words
-3. **SPICE LINE / TEASER** (smaller, below headline): One compelling sentence that makes the viewer want to read the full story — max 15 words. Make it intriguing, not just a repeat of the headline.
+#### 6 THE ECHO Styles — Full Specs
 
-**Your prompt must always include:**
-- The layout name you chose and its exact visual description
-- Exact overlay position & size (e.g. "bottom 30% of image")
-- All 3 text layers with exact wording for each
-- Accent color, bar/stripe, and badge placement
-- `"newsagent.ai"` watermark in small grey text at bottom-right
+| # | Style Name | Description |
+|---|---|---|
+| 1 | **Gritty Ground-Level** | Ground-level photo. Deep teal `#1A5C5A` gradient covering bottom 30%, fading up. Bold white serif headline. Mustard `#C9A227` kicker badge top-left of overlay. Thin teal left accent bar. Watermark `theecho.news.tv` bottom-right. |
+| 2 | **Portrait Gradient** | Close-up portrait. Dark `#0D1F1E` gradient fills bottom 40%. Bold sans-serif headline in white; key words highlighted in mustard `#C9A227`. Analytical kicker in small caps. Watermark bottom-right. |
+| 3 | **Clean Container** | Wide or cinematic photo. Clean rounded white/teal text block at bottom (not full-width overlay—more of a card). Dark `#0D1F1E` headline. Teal `#1A5C5A` left accent bar. Very readable. Watermark inside card. |
+| 4 | **Composite Dramatic** | Multiple overlaid images or textures. Photo-montage feel. Bold all-caps white headline; key words in mustard `#C9A227`. Distressed or flag textures in background. High-contrast, tabloid energy. Watermark bottom-right. |
+| 5 | **Cinematic Branded** | One dramatic high-angle or sunset photo. Black text block at bottom with teal `#1A5C5A` single vertical accent bar on left (not full gradient — clean block). White bold sans-serif headline. Watermark integrated in block. |
+| 6 | **Immersive Dark Band** | Dark teal `#0D1F1E` band at top (25%) + bottom (25%). Photo fills middle 50%. Bold white serif headline centered in bottom band. No clutter — sombre, grief-appropriate tone. `URGENT` or `BREAKING` kicker in muted mustard. Watermark bottom-band right. |
+
+---
+
+#### Your editing_prompt MUST include:
+
+1. **KICKER** (2-4 words, small caps): e.g. `BREAKING NEWS` · `COURT RULING` · `EXCLUSIVE` · `DEVELOPING` · `MARKET UPDATE` · `URGENT`
+2. **HEADLINE** (bold, large, serif feel): Hook line from your X post — max 10 words
+3. **SPICE LINE / TEASER** (smaller italic, below headline): One compelling sentence — max 15 words. Make it intriguing, not a repeat.
+
+**Always include in the prompt:**
+- THE ECHO style number and name you chose
+- Exact overlay position and size (e.g. "bottom 30% of image")
+- All 3 text layers with exact wording
+- THE ECHO colors: primary teal `#1A5C5A`, mustard highlight `#C9A227`, card dark `#0D1F1E`
+- THE ECHO brand mark position: `"THE ECHO" wordmark in the top-left corner in white on a small teal background`
+- Watermark: `"theecho.news.tv"` in small mustard text at bottom-right
 - `"Preserve original photo quality, sharpness and colors exactly — only add overlay and text. Do not upscale, blur, or re-compress."`
 
-**Example editing_prompt (CNN Dark Gradient layout, political story):**
-> "Edit this courtroom photo using the CNN Dark Gradient layout. Add a heavy black gradient
-> overlay covering the bottom 35% of the image, fading to transparent upward. Place 3 text
-> layers inside the gradient: (1) KICKER — small bold red tag reading 'COURT RULING' in the
-> top-left of the overlay; (2) HEADLINE — bold large white text 'IHC Reaffirms CJ as Master
-> of Roster' centered below the kicker; (3) SPICE LINE — smaller italic white text below the
-> headline reading 'A landmark verdict that reshapes judicial power in Pakistan'. Add a thin
-> red horizontal line separating the kicker from the headline. Add a subtle dark vignette
-> around the image corners for cinematic depth. Place 'newsagent.ai' in small grey text at
-> bottom-right. Preserve original photo quality, sharpness and colors exactly — only add
-> overlay and text. Do not upscale, blur, or re-compress."
+**Example editing_prompt (Style 1 — Gritty Ground-Level, political story):**
+> "Edit this photo using THE ECHO's Gritty Ground-Level style. Apply a deep teal (#1A5C5A) gradient covering the bottom 30% of the image, fading smoothly upward into transparency. In the top-left corner, add the THE ECHO wordmark: bold white text on a small solid teal (#1A5C5A) badge. Inside the gradient overlay, place 3 text layers: (1) KICKER — small mustard (#C9A227) sans-serif badge reading 'BREAKING NEWS'; (2) HEADLINE — bold white serif-feel text reading 'Aleema Khan Demands Independent Medical Access'; (3) SPICE LINE — smaller italic white text reading 'PTI founder's eye '90% unhealed' as petition reaches Supreme Court'. Add a thin teal (#1A5C5A) left accent bar beside the headline. Place 'theecho.news.tv' in small mustard text at bottom-right. Preserve original photo quality, sharpness and colors exactly — only add overlay and text. Do not upscale, blur, or re-compress."
+
+**Example editing_prompt (Style 5 — Cinematic Branded, economy/finance story):**
+> "Edit this market/finance photo using THE ECHO's Cinematic Branded style. The image should remain dominant. Add a solid black text block at the BOTTOM 28% of the image (not a gradient — a clean-edged rectangle). On the LEFT edge of this block, place a vertical teal (#1A5C5A) accent bar. In the top-left corner, add THE ECHO wordmark badge (white text on small teal background). Inside the black block, place: (1) KICKER — small mustard (#C9A227) sans-serif text reading 'MARKET UPDATE'; (2) HEADLINE — bold white sans-serif 'Gold Slips as Dollar Surges Amid Hormuz Crisis'; (3) SPICE LINE — smaller white italic 'Oil soars 6% as Iran shuts the world's most critical shipping lane'. Place 'theecho.news.tv' in small mustard text at bottom-right inside the block. Preserve original photo quality, sharpness and colors exactly. Only add the text block and text. Do not blur or re-compress."
 
 Then call:
 
@@ -1349,7 +1455,6 @@ Save `/social_posts.md` in this exact format:
 
 ## Instagram
 [Caption with emojis]
-**Image Suggestion:** [Specific visual description]
 
 ---
 
@@ -1412,7 +1517,7 @@ This is the LAST tool call of every run. Never skip it.
 7. **Be specific** — exact names, dates, quotes, locations — no generalities.
 8. **Stay neutral** — present all sides found in research; no editorialising.
 9. **Save files AND database** — always write `/news_input.md` and `/social_posts.md`, then call `save_posts_to_supabase` as the final step.
-10. **Image pipeline** — always attempt Steps 7b→7c→7d after saving posts. In 7c, pass ALL URLs (up to 10) to `view_candidate_images` — it downloads every image at full resolution to `output/candidate_images/` and shows them ALL to you so you can pick visually. In 7d, pick a named layout from the 20-layout table and write a 3-layer overlay prompt (kicker + headline + spice line). Call `create_post_image_gemini` (not `create_post_images`). Skip gracefully only if `fetch_images_exa` returns no results or fails entirely.
+10. **Image pipeline** — always attempt Steps 7b→→→→7d after saving posts. In 7c, pass ALL URLs (up to 10) to `view_candidate_images`. In 7d, classify the news type first, then pick the matching THE ECHO style from the News-Type → Style Selection Guide. Write a 3-layer overlay prompt (kicker + headline + spice line) using THE ECHO brand colors (teal `#1A5C5A`, mustard `#C9A227`, card dark `#0D1F1E`) and watermark (`theecho.news.tv`). Call `create_post_image_gemini` (not `create_post_images`). Skip gracefully only if `fetch_images_exa` returns no results or fails entirely.
 """
 
 

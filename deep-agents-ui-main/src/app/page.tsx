@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense, useRef } from "react
 import Link from "next/link";
 import { useQueryState } from "nuqs";
 import { supabase } from "@/lib/supabase";
+import { v4 as uuidv4 } from "uuid";
 import { getConfig, saveConfig, StandaloneConfig } from "@/lib/config";
 import { ConfigDialog } from "@/app/components/ConfigDialog";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,13 @@ function HomePageInner({
   const [autoTriggerEnabled, setAutoTriggerEnabled] = useState(false);
   const [autoTriggerInterval, setAutoTriggerInterval] = useState(30);
   const autoTriggerTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Ref to stream.submit — populated by ChatProvider once the hook is ready
+  const streamSubmitRef = useRef<((input: any, options?: any) => void) | null>(null);
+  // Track which article is currently being streamed (for status updates)
+  const streamingArticleIdRef = useRef<string | null>(null);
+  // Pending article for stream.submit — set in handleStartAgent, consumed by useEffect after threadId clears
+  const pendingArticleRef = useRef<{ message: string; articleId: string } | null>(null);
 
   const fetchAssistant = useCallback(async () => {
     const isUUID =
@@ -134,6 +142,47 @@ function HomePageInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoTriggerEnabled, autoTriggerInterval]);
 
+  // ── Effect: submit article 1 after threadId clears ──
+  // When handleStartAgent sets pendingArticleRef and clears threadId,
+  // useStream reinitializes with no thread → submit() creates a fresh thread.
+  useEffect(() => {
+    if (pendingArticleRef.current && !threadId && streamSubmitRef.current) {
+      const { message, articleId } = pendingArticleRef.current;
+      pendingArticleRef.current = null;
+      streamingArticleIdRef.current = articleId;
+      const newMessage = { id: uuidv4(), type: "human" as const, content: message };
+      streamSubmitRef.current(
+        { messages: [newMessage] },
+        {
+          optimisticValues: (prev: any) => ({
+            messages: [...(prev.messages ?? []), newMessage],
+          }),
+          config: { ...(assistant?.config ?? {}), recursion_limit: 100 },
+        }
+      );
+      mutateThreads?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId]);
+
+  // When stream.submit() finishes for article 1 → mark as Done
+  const handleStreamFinish = useCallback(async () => {
+    const articleId = streamingArticleIdRef.current;
+    if (!articleId) return;
+    streamingArticleIdRef.current = null;
+    await supabase.from("feeder_articles").update({ status: "Done" }).eq("id", articleId);
+    mutateThreads?.();
+  }, [mutateThreads]);
+
+  // When stream.submit() errors for article 1 → revert to Pending for retry
+  const handleStreamError = useCallback(async () => {
+    const articleId = streamingArticleIdRef.current;
+    if (!articleId) return;
+    streamingArticleIdRef.current = null;
+    await supabase.from("feeder_articles").update({ status: "Pending" }).eq("id", articleId);
+    mutateThreads?.();
+  }, [mutateThreads]);
+
   // Strips all HTML tags and decodes basic HTML entities from a string
   const stripHtml = (html: string): string => {
     return html
@@ -174,7 +223,9 @@ function HomePageInner({
         return;
       }
 
-      for (const article of pendingArticles) {
+      for (let i = 0; i < pendingArticles.length; i++) {
+        const article = pendingArticles[i];
+
         // Mark as Processing before firing
         await supabase
           .from("feeder_articles")
@@ -183,22 +234,46 @@ function HomePageInner({
 
         const cleanTitle = stripHtml(article.title ?? "");
         const cleanDescription = stripHtml(article.description ?? "");
-
-        // Visible user message: ONLY the article content (no instruction lines visible)
         const message = `Title: ${cleanTitle}\nDescription: ${cleanDescription}`;
 
-        // Create a fresh thread per article
-        const thread = await client.threads.create();
+        if (i === 0) {
+          // ── Article 1: LIVE streaming via stream.submit() ──
+          const submitArticle = () => {
+            if (!streamSubmitRef.current) return;
+            streamingArticleIdRef.current = article.id;
+            const newMessage = { id: uuidv4(), type: "human" as const, content: message };
+            streamSubmitRef.current(
+              { messages: [newMessage] },
+              {
+                optimisticValues: (prev: any) => ({
+                  messages: [...(prev.messages ?? []), newMessage],
+                }),
+                config: { ...(assistant.config ?? {}), recursion_limit: 100 },
+              }
+            );
+          };
 
-        const run = await client.runs.create(thread.thread_id, assistant.assistant_id, {
-          input: {
-            messages: [{ role: "user", content: message }],
-          },
-        });
-
-        // Poll this run in background: update article status when run completes or fails
-        // Failed/interrupted/errored runs → revert to Pending for reprocessing
-        pollRunStatus(thread.thread_id, run.run_id, article.id);
+          if (!threadId) {
+            // threadId is already null → useStream has no thread → submit immediately
+            submitArticle();
+          } else {
+            // threadId exists → need to clear it first so useStream creates a fresh thread
+            pendingArticleRef.current = { message, articleId: article.id };
+            await setThreadId(null);
+            // useEffect([threadId]) will fire on re-render and call stream.submit()
+          }
+          // Article 1 status handled by handleStreamFinish / handleStreamError callbacks
+        } else {
+          // ── Articles 2-N: background parallel runs ──
+          // These run silently. Click their thread in ThreadList to view progress.
+          const thread = await client.threads.create();
+          const run = await client.runs.create(thread.thread_id, assistant.assistant_id, {
+            input: {
+              messages: [{ role: "user", content: message }],
+            },
+          });
+          pollRunStatus(thread.thread_id, run.run_id, article.id);
+        }
       }
 
       mutateThreads?.();
@@ -207,6 +282,7 @@ function HomePageInner({
       alert("Failed to start agent batch processing.");
     }
   };
+
 
   /**
    * Polls a LangGraph run until it finishes, then updates feeder_articles:
@@ -415,6 +491,9 @@ function HomePageInner({
               <ChatProvider
                 activeAssistant={assistant}
                 onHistoryRevalidate={() => mutateThreads?.()}
+                submitRef={streamSubmitRef}
+                onStreamFinish={handleStreamFinish}
+                onStreamError={handleStreamError}
               >
                 <ChatInterface assistant={assistant} />
               </ChatProvider>

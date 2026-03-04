@@ -8,11 +8,49 @@ import { Input } from "@/components/ui/input";
 import {
     Settings, Home, Activity, RefreshCw, Trash2,
     PlusCircle, Rss, Globe, ShieldCheck, X, BarChart3,
-    AlertTriangle, Database, Zap
+    AlertTriangle, Database, Zap, AlarmClock, Clock,
+    ChevronRight, Timer, Layers, CheckCircle2, XCircle
 } from "lucide-react";
 
 interface FeedSource { id: string; url: string; label: string; is_active: boolean; }
 interface WhitelistDomain { id: string; domain: string; note: string; }
+
+// All setting keys the pipeline actually reads — must match these exactly
+const FEEDER_SETTING_KEYS = [
+    "max_age_minutes",
+    "batch_size",
+    "cluster_threshold",
+    "agent_db_title_limit",
+    "feeder_auto_trigger_enabled",
+    "feeder_auto_trigger_interval_hours",
+];
+
+const DEFAULTS: Record<string, string> = {
+    max_age_minutes: "60",
+    batch_size: "30",
+    cluster_threshold: "70",
+    agent_db_title_limit: "300",
+    feeder_auto_trigger_enabled: "false",
+    feeder_auto_trigger_interval_hours: "2",
+};
+
+const MAX_AGE_PRESETS = [
+    { label: "15 min", value: "15" },
+    { label: "30 min", value: "30" },
+    { label: "1 hour", value: "60" },
+    { label: "2 hours", value: "120" },
+    { label: "6 hours", value: "360" },
+    { label: "24 hours", value: "1440" },
+];
+
+const FEEDER_INTERVALS = [
+    { label: "30 min", value: "0.5" },
+    { label: "1 hour", value: "1" },
+    { label: "2 hours", value: "2" },
+    { label: "4 hours", value: "4" },
+    { label: "6 hours", value: "6" },
+    { label: "12 hours", value: "12" },
+];
 
 function StatCard({ label, value, icon: Icon, color = "text-primary", sub }: {
     label: string; value: number | string; icon: React.ElementType; color?: string; sub?: string;
@@ -29,6 +67,21 @@ function StatCard({ label, value, icon: Icon, color = "text-primary", sub }: {
     );
 }
 
+function PresetButton({ value, current, onClick, children }: {
+    value: string; current: string; onClick: () => void; children: React.ReactNode
+}) {
+    const active = current === value;
+    return (
+        <button
+            onClick={onClick}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all
+                ${active
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-muted hover:bg-accent"}`}
+        >{children}</button>
+    );
+}
+
 export default function FeederSettingsPage() {
     const [sources, setSources] = useState<FeedSource[]>([]);
     const [newUrl, setNewUrl] = useState("");
@@ -36,32 +89,75 @@ export default function FeederSettingsPage() {
     const [domains, setDomains] = useState<WhitelistDomain[]>([]);
     const [newDomain, setNewDomain] = useState("");
     const [newDomainNote, setNewDomainNote] = useState("");
-    const [settings, setEditSettings] = useState<Record<string, string>>({});
-    const [stats, setStats] = useState({ guids: 0, hashes: 0, fingerprints: 0, articles: 0, embeddings: 0, pending: 0, done: 0 });
+
+    // Settings state — starts with defaults, overwritten by DB on load
+    const [settings, setSettings] = useState<Record<string, string>>(DEFAULTS);
+    const [dbSettings, setDbSettings] = useState<Record<string, string>>(DEFAULTS); // last saved snapshot
+    const [isDirty, setIsDirty] = useState(false);
+
+    const [stats, setStats] = useState({ guids: 0, hashes: 0, articles: 0, pending: 0, done: 0 });
     const [articlesByStatus, setArticlesByStatus] = useState<{ status: string; count: number }[]>([]);
     const [loading, setLoading] = useState(false);
     const [dangerConfirm, setDangerConfirm] = useState(false);
     const [nukeBusy, setNukeBusy] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [pktTime, setPktTime] = useState("");
+    const [nextTriggerIn, setNextTriggerIn] = useState<string | null>(null);
+
+    // Live PKT clock
+    useEffect(() => {
+        const tick = () => setPktTime(new Date().toLocaleString("en-PK", {
+            timeZone: "Asia/Karachi", hour12: false,
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+        }));
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    // Auto-trigger countdown
+    useEffect(() => {
+        const enabled = settings.feeder_auto_trigger_enabled === "true";
+        const lastRun = settings.feeder_last_trigger_at;
+        if (!enabled || !lastRun) { setNextTriggerIn(null); return; }
+        const intervalMs = parseFloat(settings.feeder_auto_trigger_interval_hours || "2") * 3600_000;
+        const tick = () => {
+            const rem = new Date(lastRun).getTime() + intervalMs - Date.now();
+            if (rem <= 0) { setNextTriggerIn("Due now"); return; }
+            const h = Math.floor(rem / 3600_000);
+            const m = Math.floor((rem % 3600_000) / 60_000);
+            const s = Math.floor((rem % 60_000) / 1000);
+            setNextTriggerIn(h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`);
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [settings.feeder_auto_trigger_enabled, settings.feeder_last_trigger_at, settings.feeder_auto_trigger_interval_hours]);
 
     const loadAll = useCallback(async () => {
         setLoading(true);
         try {
-            const [srcsRes, domsRes, settRes, guidRes, hashRes, fpRes, artRes] = await Promise.all([
+            const [srcsRes, domsRes, settRes, guidRes, hashRes, artRes] = await Promise.all([
                 supabase.from("feeder_sources").select("*").order("created_at"),
                 supabase.from("feeder_whitelisted_domains").select("*").order("domain"),
                 supabase.from("feeder_settings").select("key,value"),
                 supabase.from("feeder_seen_guids").select("id", { count: "exact", head: true }),
                 supabase.from("feeder_seen_hashes").select("id", { count: "exact", head: true }),
-                supabase.from("feeder_seen_fingerprints").select("id", { count: "exact", head: true }),
                 supabase.from("feeder_articles").select("status"),
             ]);
 
             setSources(srcsRes.data ?? []);
             setDomains(domsRes.data ?? []);
-            const sMap: Record<string, string> = {};
-            for (const row of settRes.data ?? []) sMap[row.key] = row.value;
-            setEditSettings(sMap);
+
+            // Build settings map — start with defaults, overlay DB values
+            const loaded: Record<string, string> = { ...DEFAULTS };
+            for (const row of settRes.data ?? []) {
+                loaded[row.key] = row.value ?? DEFAULTS[row.key] ?? "";
+            }
+            setSettings(loaded);
+            setDbSettings(loaded);
+            setIsDirty(false);
 
             const statusCounts: Record<string, number> = {};
             for (const a of artRes.data ?? []) statusCounts[a.status] = (statusCounts[a.status] ?? 0) + 1;
@@ -70,21 +166,10 @@ export default function FeederSettingsPage() {
             setStats({
                 guids: guidRes.count ?? 0,
                 hashes: hashRes.count ?? 0,
-                fingerprints: fpRes.count ?? 0,
                 articles: artRes.data?.length ?? 0,
-                embeddings: 0, // fetched separately via Pinecone API route
                 pending: statusCounts["Pending"] ?? 0,
                 done: statusCounts["Done"] ?? 0,
             });
-
-            // Fetch Pinecone count via API
-            try {
-                const r = await fetch("/api/feeder/pinecone-stats");
-                if (r.ok) {
-                    const d = await r.json();
-                    setStats(s => ({ ...s, embeddings: d.totalRecordCount ?? 0 }));
-                }
-            } catch { }
         } finally {
             setLoading(false);
         }
@@ -92,19 +177,63 @@ export default function FeederSettingsPage() {
 
     useEffect(() => { loadAll(); }, [loadAll]);
 
+    // Track dirty state whenever settings change
+    useEffect(() => {
+        const dirty = FEEDER_SETTING_KEYS.some(k => settings[k] !== dbSettings[k]);
+        setIsDirty(dirty);
+    }, [settings, dbSettings]);
+
+    const setSetting = (key: string, value: string) => {
+        setSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    // Save ALL pipeline-relevant settings atomically
+    const saveSettings = async () => {
+        setSaveStatus('saving');
+        try {
+            const rows = FEEDER_SETTING_KEYS.map(key => ({
+                key,
+                value: settings[key] ?? DEFAULTS[key],
+                updated_at: new Date().toISOString(),
+            }));
+            const { error } = await supabase
+                .from("feeder_settings")
+                .upsert(rows, { onConflict: "key" });
+
+            if (error) {
+                console.error("Save error:", error);
+                setSaveStatus('error');
+            } else {
+                setSaveStatus('saved');
+                setDbSettings({ ...settings });
+                setIsDirty(false);
+            }
+        } catch (e) {
+            console.error("Save exception:", e);
+            setSaveStatus('error');
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 3000);
+        }
+    };
+
+    // Toggle auto-trigger: save immediately without requiring Save button
+    const toggleAutoTrigger = async () => {
+        const next = settings.feeder_auto_trigger_enabled === "true" ? "false" : "true";
+        setSetting("feeder_auto_trigger_enabled", next);
+        await supabase.from("feeder_settings").upsert(
+            { key: "feeder_auto_trigger_enabled", value: next, updated_at: new Date().toISOString() },
+            { onConflict: "key" }
+        );
+        setDbSettings(prev => ({ ...prev, feeder_auto_trigger_enabled: next }));
+    };
+
     const addSource = async () => {
         if (!newUrl.trim()) return;
         await supabase.from("feeder_sources").insert({ url: newUrl.trim(), label: newLabel.trim() || newUrl.trim() });
         setNewUrl(""); setNewLabel(""); loadAll();
     };
-
-    const deleteSource = async (id: string) => {
-        await supabase.from("feeder_sources").delete().eq("id", id); loadAll();
-    };
-
-    const toggleSource = async (id: string, is_active: boolean) => {
-        await supabase.from("feeder_sources").update({ is_active: !is_active }).eq("id", id); loadAll();
-    };
+    const deleteSource = async (id: string) => { await supabase.from("feeder_sources").delete().eq("id", id); loadAll(); };
+    const toggleSource = async (id: string, is_active: boolean) => { await supabase.from("feeder_sources").update({ is_active: !is_active }).eq("id", id); loadAll(); };
 
     const addDomain = async () => {
         if (!newDomain.trim()) return;
@@ -112,42 +241,7 @@ export default function FeederSettingsPage() {
         await supabase.from("feeder_whitelisted_domains").insert({ domain, note: newDomainNote.trim() });
         setNewDomain(""); setNewDomainNote(""); loadAll();
     };
-
-    const deleteDomain = async (id: string) => {
-        await supabase.from("feeder_whitelisted_domains").delete().eq("id", id); loadAll();
-    };
-
-    const saveSettings = async () => {
-        setSaveStatus('saving');
-        try {
-            // upsert with onConflict:'key' so existing rows are UPDATED not silently skipped
-            const results = await Promise.all(
-                Object.entries(settings).map(([key, value]) =>
-                    supabase
-                        .from("feeder_settings")
-                        .upsert(
-                            { key, value, updated_at: new Date().toISOString() },
-                            { onConflict: 'key' }
-                        )
-                )
-            );
-            const hasError = results.some(r => r.error);
-            if (hasError) {
-                console.error('Save errors:', results.filter(r => r.error).map(r => r.error));
-                setSaveStatus('error');
-            } else {
-                setSaveStatus('saved');
-            }
-            // Reload to confirm what's actually in DB
-            await loadAll();
-        } catch (e) {
-            console.error('saveSettings error:', e);
-            setSaveStatus('error');
-        } finally {
-            // Reset status after 3s
-            setTimeout(() => setSaveStatus('idle'), 3000);
-        }
-    };
+    const deleteDomain = async (id: string) => { await supabase.from("feeder_whitelisted_domains").delete().eq("id", id); loadAll(); };
 
     const clearTable = async (table: string, label: string) => {
         if (!confirm(`Clear all records from "${label}"?`)) return;
@@ -155,20 +249,15 @@ export default function FeederSettingsPage() {
         loadAll();
     };
 
-    // ── DANGER ZONE: Nuke Everything ─────────────────────────────────────────
     const nukeAll = async () => {
         setNukeBusy(true);
         try {
-            // Clear Supabase tracking tables
             await Promise.all([
                 supabase.from("feeder_seen_guids").delete().neq("id", "00000000-0000-0000-0000-000000000000"),
                 supabase.from("feeder_seen_hashes").delete().neq("id", "00000000-0000-0000-0000-000000000000"),
-                supabase.from("feeder_seen_fingerprints").delete().neq("id", "00000000-0000-0000-0000-000000000000"),
                 supabase.from("feeder_articles").delete().neq("id", "00000000-0000-0000-0000-000000000000"),
                 supabase.from("feeder_run_history").delete().neq("id", "00000000-0000-0000-0000-000000000000"),
             ]);
-            // Clear Pinecone embeddings
-            await fetch("/api/feeder/pinecone-clear", { method: "POST" });
         } finally {
             setNukeBusy(false);
             setDangerConfirm(false);
@@ -176,25 +265,20 @@ export default function FeederSettingsPage() {
         }
     };
 
-    const settingFields = [
-        { key: "batch_size", label: "Batch Size", hint: "Articles per feeder run (default: 30)" },
-        { key: "max_age_hours", label: "Max Age (hours)", hint: "Layer -2: drop articles older than this" },
-        { key: "cluster_threshold", label: "Cluster Threshold (0-100)", hint: "Layer 0: same-event grouping (70 = plan default)" },
-        { key: "fuzzy_threshold", label: "Fuzzy Threshold (0-100)", hint: "Layer 3: duplicate title similarity (65 = recommended, 50 = original default)" },
-        { key: "fuzzy_db_limit", label: "Fuzzy DB Limit", hint: "Layer 3: max DB titles to compare against (default: 500)" },
-        { key: "semantic_threshold", label: "Semantic Threshold (0-1)", hint: "Layer 5: Pinecone cosine cutoff (0.70 = plan default)" },
-        { key: "pinecone_top_k", label: "Pinecone Top-K", hint: "Layer 5: nearest vectors to query (default: 5)" },
-        { key: "pinecone_model", label: "Pinecone Model", hint: "Layer 5: embedding model name" },
-        { key: "run_interval_minutes", label: "Auto-Run Interval (min)", hint: "Feeder auto-run every X minutes" },
-    ];
-
+    const autoEnabled = settings.feeder_auto_trigger_enabled === "true";
 
     return (
         <div className="flex h-screen flex-col bg-background overflow-hidden">
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
                 <div className="flex items-center gap-3">
                     <Settings className="h-5 w-5 text-primary" />
-                    <h1 className="text-xl font-semibold">Feeder Settings & Stats</h1>
+                    <h1 className="text-xl font-semibold">Feeder Settings</h1>
+                    <span className="text-xs text-muted-foreground ml-4 font-mono">{pktTime} PKT</span>
+                    {isDirty && (
+                        <span className="ml-2 text-xs text-orange-500 font-medium px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200">
+                            Unsaved changes
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
@@ -212,20 +296,19 @@ export default function FeederSettingsPage() {
                     <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
                         <BarChart3 className="h-4 w-4" />Database Statistics
                     </h2>
-                    <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+                    <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                         <StatCard label="Seen GUIDs" value={stats.guids} icon={Database} color="text-blue-500" sub="Layer 1" />
                         <StatCard label="Seen Hashes" value={stats.hashes} icon={ShieldCheck} color="text-green-500" sub="Layer 2" />
-                        <StatCard label="NER Fingerprints" value={stats.fingerprints} icon={ShieldCheck} color="text-orange-500" sub="Layer 4" />
-                        <StatCard label="Pinecone Embeddings" value={stats.embeddings} icon={Globe} color="text-cyan-500" sub="Layer 5" />
                         <StatCard label="Articles Total" value={stats.articles} icon={Activity} color="text-purple-500" sub="All statuses" />
-                        <StatCard label="Pending" value={stats.pending} icon={Activity} color="text-yellow-500" sub="In queue" />
+                        <StatCard label="Pending" value={stats.pending} icon={Timer} color="text-yellow-500" sub="In queue" />
                         <StatCard label="Done" value={stats.done} icon={Activity} color="text-emerald-500" sub="Processed" />
                     </div>
                     {articlesByStatus.length > 0 && (
                         <div className="mt-3 flex gap-2 flex-wrap">
                             {articlesByStatus.map(s => (
                                 <div key={s.status} className="rounded-lg border bg-card px-3 py-1.5 text-sm">
-                                    <span className="font-medium">{s.status}:</span> <span className="text-muted-foreground">{s.count}</span>
+                                    <span className="font-medium">{s.status}:</span>{" "}
+                                    <span className="text-muted-foreground">{s.count}</span>
                                 </div>
                             ))}
                         </div>
@@ -233,7 +316,231 @@ export default function FeederSettingsPage() {
                 </section>
 
                 <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Feed Sources */}
+                    {/* —— Pipeline Settings —— */}
+                    <section className="rounded-xl border bg-card shadow-sm">
+                        <div className="p-4 border-b flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-primary" />
+                            <h2 className="font-semibold">Pipeline Settings</h2>
+                            <span className="ml-auto text-xs text-muted-foreground">Saved to DB on click</span>
+                        </div>
+                        <div className="p-5 space-y-6">
+
+                            {/* News Time Window */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-sm font-medium">News Time Window</label>
+                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                        {settings.max_age_minutes} min
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-2">
+                                    Drop articles older than N minutes. Also injected into Google News RSS as <code className="text-xs bg-muted px-1 rounded">when:</code>.
+                                </p>
+                                <div className="flex gap-2 flex-wrap mb-2">
+                                    {MAX_AGE_PRESETS.map(p => (
+                                        <PresetButton key={p.value} value={p.value} current={settings.max_age_minutes} onClick={() => setSetting("max_age_minutes", p.value)}>
+                                            {p.label}
+                                        </PresetButton>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number" min={5}
+                                        className="h-8 w-24 text-sm"
+                                        value={settings.max_age_minutes}
+                                        onChange={e => setSetting("max_age_minutes", e.target.value)}
+                                    />
+                                    <span className="text-xs text-muted-foreground">minutes (custom)</span>
+                                </div>
+                            </div>
+
+                            {/* Batch Size */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-sm font-medium">Batch Size</label>
+                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                        {settings.batch_size} articles
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-2">Max articles processed per pipeline run</p>
+                                <div className="flex gap-2 flex-wrap mb-2">
+                                    {["10", "20", "30", "50", "100"].map(n => (
+                                        <PresetButton key={n} value={n} current={settings.batch_size} onClick={() => setSetting("batch_size", n)}>
+                                            {n}
+                                        </PresetButton>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number" min={1}
+                                        className="h-8 w-24 text-sm"
+                                        value={settings.batch_size}
+                                        onChange={e => setSetting("batch_size", e.target.value)}
+                                    />
+                                    <span className="text-xs text-muted-foreground">articles (custom)</span>
+                                </div>
+                            </div>
+
+                            {/* Cluster Threshold */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-sm font-medium">Event Cluster Threshold</label>
+                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                        {settings.cluster_threshold}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-2">Layer 0: same-event grouping similarity (0–100)</p>
+                                <div className="flex gap-2 flex-wrap mb-2">
+                                    {["50", "60", "70", "80", "90"].map(n => (
+                                        <PresetButton key={n} value={n} current={settings.cluster_threshold} onClick={() => setSetting("cluster_threshold", n)}>
+                                            {n}
+                                        </PresetButton>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number" min={0} max={100}
+                                        className="h-8 w-24 text-sm"
+                                        value={settings.cluster_threshold}
+                                        onChange={e => setSetting("cluster_threshold", e.target.value)}
+                                    />
+                                    <span className="text-xs text-muted-foreground">score (custom)</span>
+                                </div>
+                            </div>
+
+                            <div className="p-3 rounded-lg bg-muted/50 border text-sm text-muted-foreground">
+                                <p className="font-medium text-foreground mb-2 flex items-center gap-1.5">
+                                    <Layers className="h-3.5 w-3.5" />Active Pipeline Layers
+                                </p>
+                                <ul className="space-y-1 text-xs">
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>Layer -2</strong> — Time filter (drop articles older than {settings.max_age_minutes}min)</li>
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>Layer -1</strong> — Domain whitelist</li>
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>Layer 0</strong> — Event clustering (≥{settings.cluster_threshold} score)</li>
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>Layer 1</strong> — GUID dedup</li>
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>Layer 2</strong> — Hash dedup</li>
+                                    <li><ChevronRight className="inline h-3 w-3 mr-1" /><strong>AI Agent</strong> — LLM semantic dedup (final)</li>
+                                </ul>
+                            </div>
+
+                            {/* Save button */}
+                            <div className="flex items-center gap-3">
+                                <Button onClick={saveSettings} disabled={saveStatus === 'saving' || !isDirty} className="flex-1">
+                                    {saveStatus === 'saving' ? 'Saving…' : isDirty ? 'Save Settings' : 'No Changes'}
+                                </Button>
+                                {saveStatus === 'saved' && (
+                                    <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
+                                        <CheckCircle2 className="h-4 w-4" />Saved
+                                    </span>
+                                )}
+                                {saveStatus === 'error' && (
+                                    <span className="flex items-center gap-1 text-sm text-red-600 font-medium">
+                                        <XCircle className="h-4 w-4" />Error
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* —— Auto-Trigger Schedule —— */}
+                    <section className="rounded-xl border bg-card shadow-sm">
+                        <div className="p-4 border-b flex items-center gap-2">
+                            <AlarmClock className="h-4 w-4 text-primary" />
+                            <h2 className="font-semibold">Feeder Auto-Run Schedule</h2>
+                        </div>
+                        <div className="p-5 space-y-5">
+
+                            {/* Toggle — saves immediately */}
+                            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                                <div>
+                                    <p className="text-sm font-medium">Auto-Run</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {autoEnabled ? "Feeder runs automatically on schedule" : "Only runs when triggered manually"}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={toggleAutoTrigger}
+                                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors
+                                        ${autoEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+                                >
+                                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform
+                                        ${autoEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                                </button>
+                            </div>
+
+                            {/* Interval */}
+                            <div className={autoEnabled ? "" : "opacity-50 pointer-events-none"}>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="text-sm font-medium">Run Interval</label>
+                                    <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                        every {settings.feeder_auto_trigger_interval_hours}h
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mb-2">Pipeline runs automatically every N hours</p>
+                                <div className="flex gap-2 flex-wrap mb-2">
+                                    {FEEDER_INTERVALS.map(iv => (
+                                        <PresetButton key={iv.value} value={iv.value} current={settings.feeder_auto_trigger_interval_hours} onClick={() => setSetting("feeder_auto_trigger_interval_hours", iv.value)}>
+                                            {iv.label}
+                                        </PresetButton>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="number" min={0.5} step={0.5}
+                                        className="h-8 w-24 text-sm"
+                                        value={settings.feeder_auto_trigger_interval_hours}
+                                        onChange={e => setSetting("feeder_auto_trigger_interval_hours", e.target.value)}
+                                    />
+                                    <span className="text-xs text-muted-foreground">hours (custom)</span>
+                                </div>
+                            </div>
+
+                            {/* Clock & countdown */}
+                            <div className="rounded-lg border bg-muted/40 p-3 flex items-center gap-3">
+                                <Clock className="h-4 w-4 text-primary shrink-0" />
+                                <div>
+                                    <p className="text-xs text-muted-foreground">Pakistan Time (PKT, UTC+5)</p>
+                                    <p className="text-sm font-mono font-bold">{pktTime}</p>
+                                </div>
+                            </div>
+
+                            {autoEnabled && nextTriggerIn && (
+                                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm flex items-center gap-2">
+                                    <Timer className="h-4 w-4 text-primary shrink-0" />
+                                    <span className="text-muted-foreground">Next auto-run in:</span>
+                                    <span className="font-bold text-primary">{nextTriggerIn}</span>
+                                </div>
+                            )}
+
+                            {settings.feeder_last_trigger_at && (
+                                <p className="text-xs text-muted-foreground">
+                                    Last run:{" "}
+                                    {new Date(settings.feeder_last_trigger_at).toLocaleString("en-PK", {
+                                        timeZone: "Asia/Karachi", hour12: false,
+                                        year: "numeric", month: "2-digit", day: "2-digit",
+                                        hour: "2-digit", minute: "2-digit"
+                                    })} PKT
+                                </p>
+                            )}
+
+                            <div className="p-3 rounded-lg bg-muted/50 border text-xs text-muted-foreground space-y-1">
+                                <p className="font-medium text-foreground">How it works</p>
+                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Toggle saves instantly — no Save button needed</p>
+                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Interval changes take effect within ~60 seconds on the server</p>
+                                <p><ChevronRight className="inline h-3 w-3 mr-1" />Manual trigger still available on the Feeder Dashboard</p>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <Button onClick={saveSettings} disabled={saveStatus === 'saving' || !isDirty} variant="outline" className="flex-1">
+                                    {saveStatus === 'saving' ? 'Saving…' : isDirty ? 'Save Interval' : 'No Changes'}
+                                </Button>
+                                {saveStatus === 'saved' && <span className="flex items-center gap-1 text-sm text-green-600 font-medium"><CheckCircle2 className="h-4 w-4" />Saved</span>}
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                {/* —— Sources & Domains —— */}
+                <div className="grid gap-6 lg:grid-cols-2">
                     <section className="rounded-xl border bg-card shadow-sm">
                         <div className="p-4 border-b flex items-center gap-2">
                             <Rss className="h-4 w-4 text-primary" />
@@ -241,10 +548,11 @@ export default function FeederSettingsPage() {
                             <span className="ml-auto text-xs text-muted-foreground">{sources.length} sources</span>
                         </div>
                         <div className="p-4 space-y-2 max-h-64 overflow-auto">
+                            {sources.length === 0 && <p className="text-sm text-muted-foreground">No feed sources added yet.</p>}
                             {sources.map(s => (
                                 <div key={s.id} className="flex items-center gap-2 text-sm">
-                                    <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active (click to pause)" : "Paused (click to activate)"}>
-                                        <div className={`h-2.5 w-2.5 rounded-full ${s.is_active ? "bg-green-500" : "bg-muted"}`} />
+                                    <button onClick={() => toggleSource(s.id, s.is_active)} title={s.is_active ? "Active · click to pause" : "Paused · click to activate"}>
+                                        <div className={`h-2.5 w-2.5 rounded-full transition-colors ${s.is_active ? "bg-green-500" : "bg-muted-foreground/30"}`} />
                                     </button>
                                     <div className="flex-1 min-w-0">
                                         <p className="font-medium truncate">{s.label}</p>
@@ -263,7 +571,6 @@ export default function FeederSettingsPage() {
                         </div>
                     </section>
 
-                    {/* Whitelisted Domains */}
                     <section className="rounded-xl border bg-card shadow-sm">
                         <div className="p-4 border-b flex items-center gap-2">
                             <Globe className="h-4 w-4 text-primary" />
@@ -293,38 +600,7 @@ export default function FeederSettingsPage() {
                     </section>
                 </div>
 
-                {/* Pipeline Settings */}
-                <section className="rounded-xl border bg-card shadow-sm">
-                    <div className="p-4 border-b flex items-center gap-2">
-                        <Settings className="h-4 w-4 text-primary" /><h2 className="font-semibold">Pipeline Settings</h2>
-                    </div>
-                    <div className="p-4 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                        {settingFields.map(({ key, label, hint }) => (
-                            <div key={key}>
-                                <label className="text-xs font-medium">{label}</label>
-                                <p className="text-xs text-muted-foreground mb-1.5">{hint}</p>
-                                <Input
-                                    value={settings[key] ?? ""}
-                                    onChange={e => setEditSettings(p => ({ ...p, [key]: e.target.value }))}
-                                    className="h-8 text-sm"
-                                />
-                            </div>
-                        ))}
-                    </div>
-                    <div className="px-4 pb-4 flex items-center gap-3">
-                        <Button onClick={saveSettings} size="sm" disabled={saveStatus === 'saving'}>
-                            {saveStatus === 'saving' ? 'Saving…' : 'Save Settings'}
-                        </Button>
-                        {saveStatus === 'saved' && (
-                            <span className="text-sm text-green-600 font-medium">✓ Saved successfully</span>
-                        )}
-                        {saveStatus === 'error' && (
-                            <span className="text-sm text-red-600 font-medium">✗ Save failed — check console</span>
-                        )}
-                    </div>
-                </section>
-
-                {/* Individual table clears */}
+                {/* Clear tables */}
                 <section className="rounded-xl border bg-card shadow-sm">
                     <div className="p-4 border-b flex items-center gap-2">
                         <Trash2 className="h-4 w-4 text-muted-foreground" /><h2 className="font-semibold">Clear Individual Tables</h2>
@@ -333,7 +609,6 @@ export default function FeederSettingsPage() {
                         {[
                             { table: "feeder_seen_guids", label: "Clear GUIDs (L1)" },
                             { table: "feeder_seen_hashes", label: "Clear Hashes (L2)" },
-                            { table: "feeder_seen_fingerprints", label: "Clear NER (L4)" },
                             { table: "feeder_articles", label: "Clear Articles" },
                             { table: "feeder_run_history", label: "Clear Run History" },
                         ].map(({ table, label }) => (
@@ -354,7 +629,7 @@ export default function FeederSettingsPage() {
                         <div>
                             <p className="font-medium">Delete ALL Feeder Data</p>
                             <p className="text-sm text-muted-foreground mt-1">
-                                This permanently deletes: all articles, all GUIDs, all hashes, all NER fingerprints, all Pinecone embeddings, and all run history. Your feed sources and whitelist domains are kept.
+                                Permanently deletes all articles, GUIDs, hashes, and run history. Feed sources, whitelist domains, and settings are kept.
                             </p>
                         </div>
                         {!dangerConfirm ? (

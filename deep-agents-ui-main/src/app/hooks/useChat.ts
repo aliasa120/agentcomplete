@@ -29,10 +29,16 @@ export function useChat({
   activeAssistant,
   onHistoryRevalidate,
   thread,
+  onFinishCallback,
+  onErrorCallback,
 }: {
   activeAssistant: Assistant | null;
   onHistoryRevalidate?: () => void;
   thread?: UseStreamThread<StateType>;
+  /** Called when the stream finishes successfully */
+  onFinishCallback?: () => void;
+  /** Called when the stream errors */
+  onErrorCallback?: () => void;
 }) {
   const [threadId, setThreadId] = useQueryState("threadId");
   const client = useClient();
@@ -47,8 +53,14 @@ export function useChat({
     // Enable fetching state history when switching to existing threads
     fetchStateHistory: true,
     // Revalidate thread list when stream finishes, errors, or creates new thread
-    onFinish: onHistoryRevalidate,
-    onError: onHistoryRevalidate,
+    onFinish: () => {
+      onHistoryRevalidate?.();
+      onFinishCallback?.();
+    },
+    onError: () => {
+      onHistoryRevalidate?.();
+      onErrorCallback?.();
+    },
     onCreated: onHistoryRevalidate,
     experimental_thread: thread,
   });

@@ -281,10 +281,34 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
                   />
                 );
               })}
+              {/* Show animated "Thinking" indicator when agent is running but hasn't produced output yet */}
+              {isLoading && processedMessages.length === 0 && (
+                <div className="flex items-center gap-2 mt-4 text-muted-foreground text-sm">
+                  <span className="inline-flex gap-1">
+                    <span className="animate-bounce [animation-delay:0ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                    <span className="animate-bounce [animation-delay:150ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                    <span className="animate-bounce [animation-delay:300ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                  </span>
+                  <span>Agent is thinking…</span>
+                </div>
+              )}
+              {/* Show animated dots after the last message if agent is streaming but last message has no AI content yet */}
+              {isLoading && processedMessages.length > 0 &&
+                processedMessages[processedMessages.length - 1].message.type === "human" && (
+                  <div className="flex items-center gap-2 mt-4 text-muted-foreground text-sm">
+                    <span className="inline-flex gap-1">
+                      <span className="animate-bounce [animation-delay:0ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                      <span className="animate-bounce [animation-delay:150ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                      <span className="animate-bounce [animation-delay:300ms] w-1.5 h-1.5 rounded-full bg-[#2F6868]" />
+                    </span>
+                    <span>Agent is thinking…</span>
+                  </div>
+                )}
             </>
           )}
         </div>
       </div>
+
 
       <div className="flex-shrink-0 bg-background">
         <div

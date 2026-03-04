@@ -14,8 +14,9 @@ DEFERRED STORAGE: Nothing written to DB during any layer check.
 Atomic storage block runs ONLY after article passes ALL layers.
 """
 import calendar
+import math
 import feedparser
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -35,16 +36,21 @@ from feeder_agent.agent import run_feeder_dedup_agent
 def load_settings() -> dict:
     defaults = {
         "batch_size": 30,
-        "max_age_hours": 24,
+        "max_age_minutes": 60,      # default: last 60 minutes of news
         "cluster_threshold": 70,
-        "agent_db_title_limit": 300,   # how many recent DB titles the agent compares against
+        "agent_db_title_limit": 300,
+        "feeder_auto_trigger_enabled": "false",
+        "feeder_auto_trigger_interval_hours": 2,
     }
     try:
         res = supabase_client.table("feeder_settings").select("key,value").execute()
         for row in (res.data or []):
             k, v = row["key"], row["value"]
-            if k in ("batch_size", "max_age_hours", "cluster_threshold", "agent_db_title_limit"):
+            if k in ("batch_size", "max_age_minutes", "cluster_threshold",
+                     "agent_db_title_limit", "feeder_auto_trigger_interval_hours"):
                 defaults[k] = int(v)
+            elif k == "feeder_auto_trigger_enabled":
+                defaults[k] = v
     except Exception as e:
         print(f"Warning: Could not load settings: {e}")
     return defaults
@@ -71,7 +77,34 @@ def load_feed_sources() -> list[str]:
     return ["https://news.google.com/rss/search?q=pakistan&hl=en-PK&gl=PK&ceid=PK:en"]
 
 
-def fetch_rss_feed(url: str) -> list[FeederArticle]:
+def fetch_rss_feed(url: str, max_age_minutes: int = 0) -> list[FeederArticle]:
+    """Fetch articles from an RSS feed URL.
+    
+    For Google News RSS URLs, automatically appends when:Nh to get only recent articles.
+    max_age_minutes > 0 will inject `when:Nh` into google news queries for better freshness.
+    """
+    # Inject freshness filter into Google News RSS URLs.
+    # IMPORTANT: Google News only supports when:Nh (hour-based). when:Xm returns 0 results.
+    # Strategy: ask Google for a wider window (at least 1h, max 24h) and let Layer -2
+    # do the precise minute-level time cut in Python.
+    if max_age_minutes > 0 and "news.google.com/rss" in url:
+        # Round up to nearest hour, clamp between 1h and 24h
+        when_hours = max(1, min(24, math.ceil(max_age_minutes / 60)))
+        when_val = f"{when_hours}h"
+
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        q_parts = params.get("q", [""])[0].split()
+        # Remove any existing when: filters
+        q_parts = [p for p in q_parts if not p.startswith("when:")]
+        q_parts.append(f"when:{when_val}")
+        params["q"] = [" ".join(q_parts)]
+        new_query = urlencode(params, doseq=True)
+        url = urlunparse(parsed._replace(query=new_query))
+        print(f"  [Feed] Google News time filter: when:{when_val} applied (Python Layer-2 will cut precisely to {max_age_minutes}min)")
+
+
     feed = feedparser.parse(url)
     articles = []
     for entry in feed.entries:
@@ -113,10 +146,14 @@ def _log_drop(layer: str, article_title: str, reason: str):
 # --- Main Pipeline ---------------------------------------------------------
 def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle, str]]]:
     settings = load_settings()
-    batch_size    = settings["batch_size"]
-    max_age       = settings["max_age_hours"]
-    cluster_thr   = settings["cluster_threshold"]
-    agent_db_limit = settings["agent_db_title_limit"]
+    batch_size      = settings["batch_size"]
+    max_age_minutes = settings["max_age_minutes"]   # always use minutes, no legacy override
+    cluster_thr     = settings["cluster_threshold"]
+    agent_db_limit  = settings["agent_db_title_limit"]
+
+    effective_max_minutes = max_age_minutes
+
+    print(f"\n[Pipeline] Time filter: last {effective_max_minutes} minutes ({effective_max_minutes/60:.1f}h)")
 
     domain_priority = load_domain_priority()
     feed_urls       = load_feed_sources()
@@ -127,16 +164,18 @@ def run_feeder_pipeline() -> tuple[list[FeederArticle], list[tuple[FeederArticle
     # -- Fetch --
     raw: list[FeederArticle] = []
     for url in feed_urls:
-        raw.extend(fetch_rss_feed(url))
+        raw.extend(fetch_rss_feed(url, max_age_minutes=effective_max_minutes))
     print(f"Fetched {len(raw)} raw articles from {len(feed_urls)} feed(s).")
 
-    # -- Layer -2: Time filter --
-    after_time = [a for a in raw if layer_minus2_time(a.published_parsed, max_age)]
+    # -- Layer -2: Time filter (minutes-aware) --
+    threshold_dt = datetime.now(timezone.utc) - timedelta(minutes=effective_max_minutes)
+    after_time = [a for a in raw if a.published_parsed is None or a.published_parsed >= threshold_dt]
     for a in raw:
         if a not in after_time:
-            reason = f"Too old (max {max_age}h, published: {a.published_parsed})"
+            mins_old = int((datetime.now(timezone.utc) - a.published_parsed).total_seconds() / 60)
+            reason = f"Too old ({mins_old}min old, limit={effective_max_minutes}min)"
             dropped.append((a, reason))
-    print(f"-> {len(after_time)} passed Layer -2 (time filter <={max_age}h). "
+    print(f"-> {len(after_time)} passed Layer -2 (time filter <={effective_max_minutes}min). "
           f"{len(raw)-len(after_time)} dropped.")
 
     # -- Layer -1: Domain whitelist --
