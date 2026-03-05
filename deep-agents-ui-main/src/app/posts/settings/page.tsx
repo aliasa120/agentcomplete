@@ -192,8 +192,17 @@ export default function PostSettingsPage() {
     const set = (key: keyof SocialSettings, value: string) =>
         setSettings((prev) => ({ ...prev, [key]: value }));
 
-    const toggle = (key: keyof SocialSettings) =>
-        setSettings((prev) => ({ ...prev, [key]: prev[key] === "true" ? "false" : "true" }));
+    const toggle = async (key: keyof SocialSettings) => {
+        const nextVal = settings[key] === "true" ? "false" : "true";
+        setSettings((prev) => ({ ...prev, [key]: nextVal }));
+        // When enabling auto-publish, record the timestamp so we only publish posts created after this moment
+        if (key === "social_auto_publish" && nextVal === "true") {
+            await supabase.from("agent_settings").upsert(
+                { key: "auto_publish_since", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+                { onConflict: "key" }
+            );
+        }
+    };
 
     const saveToggles = async () => {
         setSaving(true);

@@ -19,6 +19,7 @@ from research_agent.tools import (
     tavily_extract,
     think_tool,
     view_candidate_images,
+    analyze_images_gemini,
 )
 from research_agent.tools.save_to_supabase import save_posts_to_supabase
 
@@ -42,6 +43,7 @@ agent = create_deep_agent(
         tavily_extract,
         fetch_images_brave,
         view_candidate_images,
+        analyze_images_gemini,
         create_post_image_gemini,
         save_posts_to_supabase,
     ],

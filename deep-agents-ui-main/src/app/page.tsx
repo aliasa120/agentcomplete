@@ -43,9 +43,6 @@ function HomePageInner({
   const [interruptCount, setInterruptCount] = useState(0);
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [queueBatchSize, setQueueBatchSize] = useState(2);
-  const [autoTriggerEnabled, setAutoTriggerEnabled] = useState(false);
-  const [autoTriggerInterval, setAutoTriggerInterval] = useState(30);
-  const autoTriggerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Ref to stream.submit — populated by ChatProvider once the hook is ready
   const streamSubmitRef = useRef<((input: any, options?: any) => void) | null>(null);
@@ -118,29 +115,18 @@ function HomePageInner({
     fetchAssistant();
   }, [fetchAssistant]);
 
-  // Load agent settings from Supabase
+  // Load queue batch size from Supabase
   useEffect(() => {
     supabase.from("agent_settings").select("key,value").then(({ data }) => {
       if (!data) return;
       const m: Record<string, string> = {};
       for (const row of data) m[row.key] = row.value;
       if (m.queue_batch_size) setQueueBatchSize(parseInt(m.queue_batch_size, 10));
-      if (m.auto_trigger_enabled) setAutoTriggerEnabled(m.auto_trigger_enabled === "true");
-      if (m.auto_trigger_interval_minutes) setAutoTriggerInterval(parseInt(m.auto_trigger_interval_minutes, 10));
     });
   }, []);
 
-  // Auto-trigger loop
-  useEffect(() => {
-    if (autoTriggerTimerRef.current) clearInterval(autoTriggerTimerRef.current);
-    if (!autoTriggerEnabled) return;
-    const ms = autoTriggerInterval * 60 * 1000;
-    autoTriggerTimerRef.current = setInterval(() => {
-      handleStartAgent();
-    }, ms);
-    return () => { if (autoTriggerTimerRef.current) clearInterval(autoTriggerTimerRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoTriggerEnabled, autoTriggerInterval]);
+  // NOTE: Auto-trigger is handled server-side by /api/cron (pinged every 60s by CronHeartbeat in layout.tsx)
+
 
   // ── Effect: submit article 1 after threadId clears ──
   // When handleStartAgent sets pendingArticleRef and clears threadId,

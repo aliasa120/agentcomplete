@@ -40,15 +40,17 @@ def load_settings() -> dict:
         "cluster_threshold": 70,
         "agent_db_title_limit": 300,
         "feeder_auto_trigger_enabled": "false",
-        "feeder_auto_trigger_interval_hours": 2,
+        "feeder_auto_trigger_interval_minutes": 30,  # default: 30 minutes
     }
     try:
         res = supabase_client.table("feeder_settings").select("key,value").execute()
         for row in (res.data or []):
             k, v = row["key"], row["value"]
             if k in ("batch_size", "max_age_minutes", "cluster_threshold",
-                     "agent_db_title_limit", "feeder_auto_trigger_interval_hours"):
-                defaults[k] = int(v)
+                     "agent_db_title_limit", "feeder_auto_trigger_interval_minutes"):
+                defaults[k] = int(float(v))
+            elif k == "feeder_auto_trigger_interval_hours":  # legacy: convert hours -> minutes
+                defaults["feeder_auto_trigger_interval_minutes"] = int(float(v) * 60)
             elif k == "feeder_auto_trigger_enabled":
                 defaults[k] = v
     except Exception as e:

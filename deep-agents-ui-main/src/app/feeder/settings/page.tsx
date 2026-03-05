@@ -22,7 +22,7 @@ const FEEDER_SETTING_KEYS = [
     "cluster_threshold",
     "agent_db_title_limit",
     "feeder_auto_trigger_enabled",
-    "feeder_auto_trigger_interval_hours",
+    "feeder_auto_trigger_interval_minutes",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -31,7 +31,7 @@ const DEFAULTS: Record<string, string> = {
     cluster_threshold: "70",
     agent_db_title_limit: "300",
     feeder_auto_trigger_enabled: "false",
-    feeder_auto_trigger_interval_hours: "2",
+    feeder_auto_trigger_interval_minutes: "30",
 };
 
 const MAX_AGE_PRESETS = [
@@ -44,12 +44,13 @@ const MAX_AGE_PRESETS = [
 ];
 
 const FEEDER_INTERVALS = [
-    { label: "30 min", value: "0.5" },
-    { label: "1 hour", value: "1" },
-    { label: "2 hours", value: "2" },
-    { label: "4 hours", value: "4" },
-    { label: "6 hours", value: "6" },
-    { label: "12 hours", value: "12" },
+    { label: "10 min", value: "10" },
+    { label: "15 min", value: "15" },
+    { label: "30 min", value: "30" },
+    { label: "1 hour", value: "60" },
+    { label: "2 hours", value: "120" },
+    { label: "4 hours", value: "240" },
+    { label: "6 hours", value: "360" },
 ];
 
 function StatCard({ label, value, icon: Icon, color = "text-primary", sub }: {
@@ -116,24 +117,29 @@ export default function FeederSettingsPage() {
         return () => clearInterval(id);
     }, []);
 
-    // Auto-trigger countdown
+    // Auto-trigger countdown — shows exact PKT target time + time remaining
     useEffect(() => {
         const enabled = settings.feeder_auto_trigger_enabled === "true";
         const lastRun = settings.feeder_last_trigger_at;
         if (!enabled || !lastRun) { setNextTriggerIn(null); return; }
-        const intervalMs = parseFloat(settings.feeder_auto_trigger_interval_hours || "2") * 3600_000;
+        const intervalMs = parseInt(settings.feeder_auto_trigger_interval_minutes || "30", 10) * 60_000;
+        const targetTime = new Date(lastRun).getTime() + intervalMs;
+        // Format the fixed target time in PKT once
+        const targetPKT = new Date(targetTime).toLocaleString("en-PK", {
+            timeZone: "Asia/Karachi", hour12: false,
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+        });
         const tick = () => {
-            const rem = new Date(lastRun).getTime() + intervalMs - Date.now();
-            if (rem <= 0) { setNextTriggerIn("Due now"); return; }
-            const h = Math.floor(rem / 3600_000);
-            const m = Math.floor((rem % 3600_000) / 60_000);
+            const rem = targetTime - Date.now();
+            if (rem <= 0) { setNextTriggerIn(`${targetPKT} PKT (due now)`); return; }
+            const m = Math.floor(rem / 60_000);
             const s = Math.floor((rem % 60_000) / 1000);
-            setNextTriggerIn(h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`);
+            setNextTriggerIn(`${targetPKT} PKT (in ${m}m ${s}s)`);
         };
         tick();
         const id = setInterval(tick, 1000);
         return () => clearInterval(id);
-    }, [settings.feeder_auto_trigger_enabled, settings.feeder_last_trigger_at, settings.feeder_auto_trigger_interval_hours]);
+    }, [settings.feeder_auto_trigger_enabled, settings.feeder_last_trigger_at, settings.feeder_auto_trigger_interval_minutes]);
 
     const loadAll = useCallback(async () => {
         setLoading(true);
@@ -216,14 +222,21 @@ export default function FeederSettingsPage() {
         }
     };
 
-    // Toggle auto-trigger: save immediately without requiring Save button
+    // Toggle auto-trigger: save immediately; when enabling, record NOW as schedule start
     const toggleAutoTrigger = async () => {
         const next = settings.feeder_auto_trigger_enabled === "true" ? "false" : "true";
+        const now = new Date().toISOString();
         setSetting("feeder_auto_trigger_enabled", next);
-        await supabase.from("feeder_settings").upsert(
-            { key: "feeder_auto_trigger_enabled", value: next, updated_at: new Date().toISOString() },
-            { onConflict: "key" }
-        );
+        const rows: { key: string; value: string; updated_at: string }[] = [
+            { key: "feeder_auto_trigger_enabled", value: next, updated_at: now },
+        ];
+        if (next === "true") {
+            // Start countdown from NOW so the UI always shows a meaningful next-trigger time
+            rows.push({ key: "feeder_last_trigger_at", value: now, updated_at: now });
+            setSetting("feeder_last_trigger_at", now);
+            setDbSettings(prev => ({ ...prev, feeder_last_trigger_at: now }));
+        }
+        await supabase.from("feeder_settings").upsert(rows, { onConflict: "key" });
         setDbSettings(prev => ({ ...prev, feeder_auto_trigger_enabled: next }));
     };
 
@@ -472,25 +485,25 @@ export default function FeederSettingsPage() {
                                 <div className="flex items-center justify-between mb-1">
                                     <label className="text-sm font-medium">Run Interval</label>
                                     <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                        every {settings.feeder_auto_trigger_interval_hours}h
+                                        every {settings.feeder_auto_trigger_interval_minutes}min
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground mb-2">Pipeline runs automatically every N hours</p>
                                 <div className="flex gap-2 flex-wrap mb-2">
                                     {FEEDER_INTERVALS.map(iv => (
-                                        <PresetButton key={iv.value} value={iv.value} current={settings.feeder_auto_trigger_interval_hours} onClick={() => setSetting("feeder_auto_trigger_interval_hours", iv.value)}>
+                                        <PresetButton key={iv.value} value={iv.value} current={settings.feeder_auto_trigger_interval_minutes} onClick={() => setSetting("feeder_auto_trigger_interval_minutes", iv.value)}>
                                             {iv.label}
                                         </PresetButton>
                                     ))}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Input
-                                        type="number" min={0.5} step={0.5}
+                                        type="number" min={1} step={1}
                                         className="h-8 w-24 text-sm"
-                                        value={settings.feeder_auto_trigger_interval_hours}
-                                        onChange={e => setSetting("feeder_auto_trigger_interval_hours", e.target.value)}
+                                        value={settings.feeder_auto_trigger_interval_minutes}
+                                        onChange={e => setSetting("feeder_auto_trigger_interval_minutes", e.target.value)}
                                     />
-                                    <span className="text-xs text-muted-foreground">hours (custom)</span>
+                                    <span className="text-xs text-muted-foreground">minutes (custom)</span>
                                 </div>
                             </div>
 

@@ -135,13 +135,24 @@ def save_posts_to_supabase(social_posts_markdown: str) -> str:
     print(f"[save_to_supabase] Instagram chars: {len(parsed['instagram'])}")
     print(f"[save_to_supabase] Facebook chars: {len(parsed['facebook'])}")
 
+    # ── Image path: markdown Images section OR fallback to latest_image_path.txt ──
+    img_path = parsed["image_path"]
+    if not img_path and _LATEST_IMAGE_FILE.exists():
+        try:
+            fallback = _LATEST_IMAGE_FILE.read_text(encoding="utf-8").strip()
+            if fallback and Path(fallback).exists():
+                img_path = fallback
+                print(f"[save_to_supabase] Using fallback image from latest_image_path.txt: {img_path}")
+        except Exception as e:
+            print(f"[save_to_supabase] Could not read latest_image_path.txt: {e}")
+
     # Upload image (optional — run in thread so SSL hangs can't block the DB insert)
     image_url = None
     _result_box: list = []  # mutable box so the thread can pass back the URL
 
     def _upload_in_thread():
         try:
-            _result_box.append(_upload_image(supabase_url, parsed["image_path"]))
+            _result_box.append(_upload_image(supabase_url, img_path))
         except BaseException as e:
             print(f"[save_to_supabase] ⚠️ Image upload failed in thread: {e}")
             _result_box.append(None)

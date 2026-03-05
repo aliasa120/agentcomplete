@@ -12,13 +12,14 @@ import {
 
 interface Article { id: string; title: string; description: string; url: string; source_domain: string; status: string; created_at: string; }
 
-const AGENT_SETTING_KEYS = ["queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes", "last_trigger_at"];
+const AGENT_SETTING_KEYS = ["queue_batch_size", "auto_trigger_enabled", "auto_trigger_interval_minutes", "auto_trigger_last_at"];
 
 const DEFAULTS: Record<string, string> = {
     queue_batch_size: "2",
     auto_trigger_enabled: "false",
     auto_trigger_interval_minutes: "30",
-    last_trigger_at: "",
+    auto_trigger_last_at: "",
+    last_trigger_at: "",  // manual trigger timestamp (display only)
 };
 
 const INTERVALS = [
@@ -28,7 +29,7 @@ const INTERVALS = [
     { label: "2 hours", value: "120" },
     { label: "4 hours", value: "240" },
 ];
-const BATCH_SIZES = ["2", "5", "10", "15", "20"];
+const BATCH_SIZES = ["1", "2", "5", "10", "15", "20"];
 
 function StatusBadge({ status }: { status: string }) {
     const color: Record<string, string> = {
@@ -53,6 +54,7 @@ export default function AgentSettingsPage() {
     const [loading, setLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
     const [nextTriggerIn, setNextTriggerIn] = useState<string | null>(null);
+    const [nextTriggerAt, setNextTriggerAt] = useState<string | null>(null);
     const [pktTime, setPktTime] = useState("");
 
     // Live PKT clock
@@ -67,31 +69,38 @@ export default function AgentSettingsPage() {
         return () => clearInterval(id);
     }, []);
 
-    // Dirty tracking
+    // Dirty tracking — exclude auto_trigger_last_at and last_trigger_at (runtime, not user-editable)
     useEffect(() => {
         const dirty = AGENT_SETTING_KEYS
-            .filter(k => k !== "last_trigger_at")
+            .filter(k => k !== "auto_trigger_last_at" && k !== "last_trigger_at")
             .some(k => settings[k] !== dbSettings[k]);
         setIsDirty(dirty);
     }, [settings, dbSettings]);
 
-    // Auto-trigger countdown
+    // Auto-trigger countdown — uses auto_trigger_last_at (set when toggle was turned ON or auto-trigger fired)
+    // This is separate from last_trigger_at which is written by manual runs
     useEffect(() => {
         const enabled = settings.auto_trigger_enabled === "true";
-        const lastAt = settings.last_trigger_at;
-        if (!enabled || !lastAt) { setNextTriggerIn(null); return; }
+        const lastAt = settings.auto_trigger_last_at;
+        if (!enabled || !lastAt) { setNextTriggerIn(null); setNextTriggerAt(null); return; }
         const intervalMs = parseInt(settings.auto_trigger_interval_minutes || "30", 10) * 60_000;
+        const targetTime = new Date(lastAt).getTime() + intervalMs;
+        // Format the fixed target time in PKT once
+        setNextTriggerAt(new Date(targetTime).toLocaleString("en-PK", {
+            timeZone: "Asia/Karachi", hour12: false,
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+        }));
         const tick = () => {
-            const rem = new Date(lastAt).getTime() + intervalMs - Date.now();
-            if (rem <= 0) { setNextTriggerIn("Due now"); return; }
+            const rem = targetTime - Date.now();
+            if (rem <= 0) { setNextTriggerIn("due now"); return; }
             const m = Math.floor(rem / 60_000);
             const s = Math.floor((rem % 60_000) / 1000);
-            setNextTriggerIn(`${m}m ${s}s`);
+            setNextTriggerIn(`in ${m}m ${s}s`);
         };
         tick();
         const id = setInterval(tick, 1000);
         return () => clearInterval(id);
-    }, [settings.auto_trigger_enabled, settings.last_trigger_at, settings.auto_trigger_interval_minutes]);
+    }, [settings.auto_trigger_enabled, settings.auto_trigger_last_at, settings.auto_trigger_interval_minutes]);
 
     const batchSize = parseInt(settings.queue_batch_size || "2", 10);
 
@@ -147,14 +156,21 @@ export default function AgentSettingsPage() {
         }
     };
 
-    // Toggle saves immediately without requiring Save button
+    // Toggle saves immediately; when enabling, record NOW as start of schedule
     const toggleAutoTrigger = async () => {
         const next = settings.auto_trigger_enabled === "true" ? "false" : "true";
+        const now = new Date().toISOString();
         setSetting("auto_trigger_enabled", next);
-        await supabase.from("agent_settings").upsert(
-            { key: "auto_trigger_enabled", value: next, updated_at: new Date().toISOString() },
-            { onConflict: "key" }
-        );
+        const upserts: { key: string; value: string; updated_at: string }[] = [
+            { key: "auto_trigger_enabled", value: next, updated_at: now },
+        ];
+        if (next === "true") {
+            // Start schedule from NOW so countdown is always fresh from toggle-on moment
+            upserts.push({ key: "auto_trigger_last_at", value: now, updated_at: now });
+            setSetting("auto_trigger_last_at", now);
+            setDbSettings(prev => ({ ...prev, auto_trigger_last_at: now }));
+        }
+        await supabase.from("agent_settings").upsert(upserts, { onConflict: "key" });
         setDbSettings(prev => ({ ...prev, auto_trigger_enabled: next }));
     };
 
@@ -167,6 +183,7 @@ export default function AgentSettingsPage() {
     const fireAgent = async () => {
         const articles = queue.slice(0, batchSize);
         if (articles.length === 0) { alert("No pending articles in queue."); return; }
+        // Manual trigger: update last_trigger_at (for display) but NOT auto_trigger_last_at (that's the auto-schedule clock)
         await supabase.from("agent_settings").upsert(
             { key: "last_trigger_at", value: new Date().toISOString(), updated_at: new Date().toISOString() },
             { onConflict: "key" }
@@ -317,11 +334,15 @@ export default function AgentSettingsPage() {
                                 </div>
                             </div>
 
-                            {autoEnabled && nextTriggerIn && (
+                            {autoEnabled && nextTriggerAt && (
                                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center gap-2 text-sm">
                                     <Timer className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-muted-foreground">Next trigger in:</span>
-                                    <span className="font-bold text-primary">{nextTriggerIn}</span>
+                                    <div>
+                                        <p className="text-muted-foreground text-xs">Next trigger at</p>
+                                        <p className="font-bold text-primary">{nextTriggerAt} PKT
+                                            {nextTriggerIn && <span className="font-normal text-muted-foreground ml-2 text-xs">({nextTriggerIn})</span>}
+                                        </p>
+                                    </div>
                                 </div>
                             )}
 

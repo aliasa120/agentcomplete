@@ -107,16 +107,13 @@ def _gpt_image_edit(img: Image.Image, editing_prompt: str) -> Image.Image | None
     """Edit a news photo using Gemini-2.5-Flash-Image via Vercel AI Gateway.
 
     Uses /v1/chat/completions — Gemini 2.5 Flash Image is a multimodal LLM that
-    accepts image input AND generates image output, exactly like the Vercel playground.
-
-    The reference photo is sent as base64 JPEG in the message content.
-    The edited image is returned in choices[0].message.images array.
+    accepts image input AND generates image output.
 
     Returns edited PIL image or None on failure.
     """
     api_key = os.environ.get("AI_GATEWAY_API_KEY", "")
     if not api_key or api_key in ("", "your_vercel_ai_gateway_key_here"):
-        print("[create_post_image] AI_GATEWAY_API_KEY not set -- skipping Gemini-Image.")
+        print("[create_post_image] AI_GATEWAY_API_KEY not set -- skipping image edit.")
         return None
 
     # Encode the reference photo as base64 JPEG (1024x1024)

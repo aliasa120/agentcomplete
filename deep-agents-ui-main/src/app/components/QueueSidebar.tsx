@@ -17,19 +17,20 @@ interface FeederArticle {
 export function QueueSidebar({ onClose }: { onClose: () => void }) {
     const [articles, setArticles] = useState<FeederArticle[]>([]);
     const [totalPending, setTotalPending] = useState(0);
-    const [batchSize, setBatchSize] = useState(2);
+    const [batchSize, setBatchSize] = useState(1);
     const [loading, setLoading] = useState(true);
 
     const fetchQueue = async () => {
         setLoading(true);
         try {
-            // 1. Read queue_batch_size from agent_settings
+            // 1. Read queue_batch_size from agent_settings (key-value table)
             const { data: settings } = await supabase
                 .from("agent_settings")
-                .select("queue_batch_size")
+                .select("value")
+                .eq("key", "queue_batch_size")
                 .limit(1)
                 .single();
-            const size = parseInt(settings?.queue_batch_size ?? "2", 10);
+            const size = parseInt(settings?.value ?? "1", 10);
             setBatchSize(size);
 
             // 2. Fetch ONLY the next N articles in FIFO order (oldest first)
@@ -55,6 +56,19 @@ export function QueueSidebar({ onClose }: { onClose: () => void }) {
     };
 
     useEffect(() => { fetchQueue(); }, []);
+
+    // Auto-refresh whenever agent_settings changes (e.g. batch size updated)
+    useEffect(() => {
+        const channel = supabase
+            .channel("queue-settings-watch")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "agent_settings" },
+                () => { fetchQueue(); }
+            )
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, []);
 
     return (
         <div className="flex h-full flex-col border-r border-border bg-card">

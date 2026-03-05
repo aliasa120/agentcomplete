@@ -1,5 +1,6 @@
 """Export deep research tools."""
 
+from .analyze_images_gemini import analyze_images_gemini
 from .create_post_image_gemini import create_post_image_gemini
 from .fetch_images_brave import fetch_images_brave
 from .linkup_search import linkup_search
@@ -14,6 +15,7 @@ __all__ = [
     "think_tool",
     "fetch_images_brave",
     "view_candidate_images",
+    "analyze_images_gemini",
     "create_post_image_gemini",
     "save_posts_to_supabase",
 ]
