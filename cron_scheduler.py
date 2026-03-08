@@ -367,7 +367,8 @@ def check_auto_publish() -> None:
                     # retried every tick — only a fresh auto_publish_since will
                     # re-enable retrying them.
                     if failures:
-                        new_published_to = dict(current_published_to)
+                        # Use the published_to returned by the API so we don't overwrite successes
+                        new_published_to = dict(result.get("published_to", current_published_to))
                         for plat, err in failures.items():
                             log.warning(f"  ⚠️  Post {post_id[:8]}… failed on {plat}: {err}")
                             # Use False (not None) to mark "attempted but failed"
