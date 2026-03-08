@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { format } from "date-fns";
-import { Loader2, MessageSquare, X } from "lucide-react";
+import { Loader2, MessageSquare, X, Trash2 } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ThreadItem } from "@/app/hooks/useThreads";
 import { useThreads } from "@/app/hooks/useThreads";
+import { useClient } from "@/providers/ClientProvider";
 
 type StatusFilter = "all" | "idle" | "busy" | "interrupted" | "error";
 
@@ -123,8 +124,10 @@ export function ThreadList({
   onClose,
   onInterruptCountChange,
 }: ThreadListProps) {
-  const [currentThreadId] = useQueryState("threadId");
+  const [currentThreadId, setCurrentThreadId] = useQueryState("threadId");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const client = useClient();
 
   const threads = useThreads({
     status: statusFilter === "all" ? undefined : statusFilter,
@@ -205,6 +208,25 @@ export function ThreadList({
   useEffect(() => {
     onInterruptCountChange?.(interruptedCount);
   }, [interruptedCount, onInterruptCountChange]);
+
+  const handleDeleteThread = async (e: React.MouseEvent, threadId: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this thread?")) return;
+
+    try {
+      setDeletingId(threadId);
+      await client.threads.delete(threadId);
+      if (currentThreadId === threadId) {
+        await setCurrentThreadId(null);
+      }
+      mutateFn();
+    } catch (error) {
+      console.error("Failed to delete thread:", error);
+      alert("Failed to delete thread.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -297,12 +319,19 @@ export function ThreadList({
                   </h4>
                   <div className="flex flex-col gap-1">
                     {groupThreads.map((thread) => (
-                      <button
+                      <div
                         key={thread.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => onThreadSelect(thread.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onThreadSelect(thread.id);
+                          }
+                        }}
                         className={cn(
-                          "grid w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200",
+                          "group grid w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                           "hover:bg-accent",
                           currentThreadId === thread.id
                             ? "border border-primary bg-accent hover:bg-accent"
@@ -320,12 +349,27 @@ export function ThreadList({
                               {formatTime(thread.updatedAt)}
                             </span>
                           </div>
-                          {/* Description + Status Row */}
-                          <div className="flex items-center justify-between">
+                          {/* Description + Status + Delete Row */}
+                          <div className="flex items-center justify-between group/desc">
                             <p className="flex-1 truncate text-sm text-muted-foreground">
                               {thread.description}
                             </p>
-                            <div className="ml-2 flex-shrink-0">
+                            <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+                              {/* Hover delete button */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive text-muted-foreground mr-1"
+                                onClick={(e) => handleDeleteThread(e, thread.id)}
+                                disabled={deletingId === thread.id}
+                                title="Delete thread"
+                              >
+                                {deletingId === thread.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
                               <div
                                 className={cn(
                                   "h-2 w-2 rounded-full",
@@ -335,7 +379,7 @@ export function ThreadList({
                             </div>
                           </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>

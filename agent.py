@@ -7,9 +7,11 @@ orchestration (gap analysis, file I/O, synthesis, post writing) and web research
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 from langchain_openai import ChatOpenAI
 from deepagents import create_deep_agent
+from deepagents.backends.filesystem import FilesystemBackend
 
 from research_agent.prompts import MAIN_AGENT_INSTRUCTIONS
 from research_agent.tools import (
@@ -20,6 +22,7 @@ from research_agent.tools import (
     think_tool,
     view_candidate_images,
     analyze_images_gemini,
+    overwrite_file,
 )
 from research_agent.tools.save_to_supabase import save_posts_to_supabase
 
@@ -34,9 +37,19 @@ model = ChatOpenAI(
     temperature=0.45,
 )
 
-# Create the single agent — no subagents list
+# Use FilesystemBackend so the agent's read_file / write_file tools and the
+# SkillsMiddleware all operate on real files in the project directory.
+# virtual_mode=True means all paths are anchored to root_dir:
+#   /skills/planning/SKILL.md  →  <project_root>/skills/planning/SKILL.md
+#   /news_input.md             →  <project_root>/news_input.md
+_PROJECT_ROOT = Path(__file__).parent
+backend = FilesystemBackend(root_dir=_PROJECT_ROOT, virtual_mode=True)
+
+# Create the single agent — skills loaded from ./skills/
 agent = create_deep_agent(
     model=model,
+    backend=backend,
+    skills=["/skills/"],
     tools=[
         linkup_search,
         think_tool,
@@ -45,8 +58,10 @@ agent = create_deep_agent(
         view_candidate_images,
         analyze_images_gemini,
         create_post_image_gemini,
+        overwrite_file,
         save_posts_to_supabase,
     ],
     system_prompt=INSTRUCTIONS,
 )
+
 

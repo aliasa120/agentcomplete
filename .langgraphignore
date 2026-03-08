@@ -7,3 +7,12 @@ output
 .ruff_cache
 deep-agents-ui-main
 node_modules
+skills
+news_input.md
+social_posts.md
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+.langgraph_api

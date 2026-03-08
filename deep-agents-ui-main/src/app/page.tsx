@@ -143,7 +143,7 @@ function HomePageInner({
           optimisticValues: (prev: any) => ({
             messages: [...(prev.messages ?? []), newMessage],
           }),
-          config: { ...(assistant?.config ?? {}), recursion_limit: 100 },
+          config: { ...(assistant?.config ?? {}), recursion_limit: 200 },
         }
       );
       mutateThreads?.();
@@ -234,7 +234,7 @@ function HomePageInner({
                 optimisticValues: (prev: any) => ({
                   messages: [...(prev.messages ?? []), newMessage],
                 }),
-                config: { ...(assistant.config ?? {}), recursion_limit: 100 },
+                config: { ...(assistant.config ?? {}), recursion_limit: 200 },
               }
             );
           };

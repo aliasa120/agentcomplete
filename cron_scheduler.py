@@ -39,8 +39,14 @@ SUPABASE_KEY = (
 )
 FEEDER_URL   = os.getenv("FEEDER_SERVER_URL", "http://localhost:8080")
 LG_URL       = os.getenv("LANGGRAPH_URL") or os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:2024")
+# URL of the Next.js frontend (used to call /api/publish)
+NEXT_UI_URL  = os.getenv("NEXT_UI_URL", "http://localhost:3000")  # override: http://frontend:3000 in Docker
 
 TICK_SECONDS = 60   # how often we check
+
+# In-memory set of post IDs currently being published — prevents double-fire
+# across ticks if publishing takes longer than TICK_SECONDS.
+_publishing_in_progress: set = set()
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -256,12 +262,144 @@ def check_agent() -> None:
         log.error(f"check_agent error: {e}")
 
 
+# ── Auto-publish social posts ─────────────────────────────────────────────────
+def check_auto_publish() -> None:
+    """
+    Runs on every tick. Finds social_posts that are not yet fully published
+    to all enabled platforms and calls /api/publish (the Next.js endpoint).
+
+    Reliability guarantees:
+      - REQUIRES auto_publish_since: if not set, saves current time and skips.
+        This means "turning on auto-publish" is the gate — old posts are NEVER
+        published automatically.
+      - Uses _publishing_in_progress to prevent double-fire across slow ticks.
+      - After a publish attempt, marks failed platforms as False in published_to
+        in Supabase so they are NOT retried on future ticks. A post is only
+        retried if the user manually toggles auto-publish off → on again
+        (which refreshes auto_publish_since) and the post is after that cutoff.
+      - Per-post error handling: one failure never blocks others.
+    """
+    global _publishing_in_progress
+    try:
+        # ── 1. Read settings ──────────────────────────────────────────────────
+        rows = _sb_get(
+            "agent_settings",
+            "key=in.(social_auto_publish,auto_publish_since,"
+            "social_twitter_enabled,social_fb_enabled,social_ig_enabled)"
+        )
+        smap = {r["key"]: r["value"] for r in rows}
+
+        enabled = smap.get("social_auto_publish", "false").lower() == "true"
+        if not enabled:
+            return   # silent — no log spam when disabled
+
+        # ── 2. STRICT cutoff guard ────────────────────────────────────────────
+        since_str = (smap.get("auto_publish_since", "") or "").strip()
+        if not since_str:
+            # auto_publish_since was never written — set it NOW and skip.
+            # Next tick onward, only posts created after this moment are eligible.
+            cutoff = now_iso()
+            _sb_upsert("agent_settings", [{"key": "auto_publish_since", "value": cutoff, "updated_at": cutoff}])
+            log.info(f"AutoPublish: auto_publish_since was missing — set to {cutoff}. No posts published this tick.")
+            return
+
+        # ── 3. Build enabled platforms ────────────────────────────────────────
+        platforms: list[str] = []
+        if smap.get("social_twitter_enabled") == "true":
+            platforms.append("twitter")
+        if smap.get("social_fb_enabled") == "true":
+            platforms.append("facebook")
+        if smap.get("social_ig_enabled") == "true":
+            platforms.append("instagram")
+
+        if not platforms:
+            return
+
+        # ── 4. Query ONLY posts created after the cutoff ──────────────────────
+        posts = _sb_get(
+            "social_posts",
+            f"select=id,created_at,published_to&order=created_at.asc"
+            f"&created_at=gte.{since_str}"
+        )
+
+        if not posts:
+            return   # nothing new to publish
+
+        # ── 5. Filter to posts that still need publishing ─────────────────────
+        to_publish = []
+        for post in posts:
+            post_id = post["id"]
+            if post_id in _publishing_in_progress:
+                continue
+            published_to: dict = post.get("published_to") or {}
+            # Only include platforms where value is not True (False or missing)
+            # Note: value == False means we already tried and failed — skip it.
+            # value == None / missing means never attempted — try it.
+            needed = [p for p in platforms if published_to.get(p) is None or published_to.get(p) == ""]
+            if needed:
+                to_publish.append((post_id, needed, published_to))
+
+        if not to_publish:
+            return
+
+        log.info(f"▶ AUTO-PUBLISH: {len(to_publish)} new post(s) to publish...")
+
+        # ── 6. Publish each post ──────────────────────────────────────────────
+        for post_id, needed_platforms, current_published_to in to_publish:
+            _publishing_in_progress.add(post_id)
+            try:
+                resp = requests.post(
+                    f"{NEXT_UI_URL}/api/publish",
+                    json={"post_id": post_id, "platforms": needed_platforms},
+                    headers={"Content-Type": "application/json"},
+                    timeout=120,   # Instagram container processing can take ~60 s
+                )
+                if resp.ok:
+                    result = resp.json()
+                    results_detail = result.get("results", {})
+                    successes = [p for p, r in results_detail.items() if r.get("success")]
+                    failures  = {p: r.get("error") for p, r in results_detail.items() if not r.get("success")}
+
+                    if successes:
+                        log.info(f"  ✅ Post {post_id[:8]}… published to: {', '.join(successes)}")
+
+                    # Mark failed platforms as False in Supabase so they aren't
+                    # retried every tick — only a fresh auto_publish_since will
+                    # re-enable retrying them.
+                    if failures:
+                        new_published_to = dict(current_published_to)
+                        for plat, err in failures.items():
+                            log.warning(f"  ⚠️  Post {post_id[:8]}… failed on {plat}: {err}")
+                            # Use False (not None) to mark "attempted but failed"
+                            new_published_to[plat] = False
+                        try:
+                            _sb_patch(
+                                "social_posts",
+                                f"id=eq.{post_id}",
+                                {"published_to": new_published_to}
+                            )
+                        except Exception as patch_err:
+                            log.error(f"  ❌ Could not save failure state for post {post_id[:8]}…: {patch_err}")
+                else:
+                    log.error(f"  ❌ /api/publish HTTP {resp.status_code} for post {post_id[:8]}…: {resp.text[:200]}")
+            except requests.exceptions.Timeout:
+                log.error(f"  ❌ Timeout publishing post {post_id[:8]}… (>120s)")
+            except Exception as e:
+                log.error(f"  ❌ Error publishing post {post_id[:8]}…: {e}")
+            finally:
+                _publishing_in_progress.discard(post_id)
+
+    except Exception as e:
+        log.error(f"check_auto_publish error: {e}")
+
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 def main():
     log.info("=" * 60)
     log.info("Cron Scheduler started.")
     log.info(f"  Feeder URL:    {FEEDER_URL}")
     log.info(f"  LangGraph URL: {LG_URL}")
+    log.info(f"  Next.js URL:   {NEXT_UI_URL}")
     log.info(f"  Supabase URL:  {SUPABASE_URL[:40]}...")
     log.info(f"  Tick interval: {TICK_SECONDS}s")
     log.info("=" * 60)
@@ -270,6 +408,7 @@ def main():
         log.info("--- tick ---")
         check_feeder()
         check_agent()
+        check_auto_publish()
         time.sleep(TICK_SECONDS)
 
 

@@ -282,7 +282,7 @@ export default function PostSettingsPage() {
                         </div>
                         <div className="flex-1">
                             <p className="font-semibold text-[15px]">Auto-Publish</p>
-                            <p className="text-xs text-muted-foreground">Automatically publish new posts when the Posts page is open</p>
+                            <p className="text-xs text-muted-foreground">Automatically publish new posts 24/7 via the server-side cron scheduler (no need to keep the page open)</p>
                         </div>
                         <span className="text-sm text-muted-foreground mr-1">{settings.social_auto_publish === "true" ? "ON" : "OFF"}</span>
                         <Toggle enabled={settings.social_auto_publish === "true"} onToggle={() => toggle("social_auto_publish")} />

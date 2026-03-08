@@ -7,7 +7,8 @@ from langchain_core.tools import InjectedToolArg, tool
 from linkup import LinkupClient
 from typing_extensions import Annotated
 
-linkup_client = LinkupClient(api_key=os.environ.get("LINKUP_API_KEY", ""))
+# Client initialized lazily inside the tool to prevent import errors on server startup.
+
 
 
 @tool(parse_docstring=True)
@@ -34,6 +35,11 @@ def linkup_search(
     Returns:
         Sourced answer with inline citations and source URLs.
     """
+    api_key = os.environ.get("LINKUP_API_KEY", "")
+    if not api_key:
+        return "Error: LINKUP_API_KEY environment variable is not set. Cannot perform search."
+        
+    linkup_client = LinkupClient(api_key=api_key)
     response = linkup_client.search(
         query=query,
         depth=depth,

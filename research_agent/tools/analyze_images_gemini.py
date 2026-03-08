@@ -1,24 +1,19 @@
-"""Parallel image analyzer using google/gemini-3-flash via LiteLLM.
+"""Single-call image analyzer + editing-prompt writer using google/gemini-3-flash.
 
-Flow:
-1. Receives up to 5 image URLs (already on disk from view_candidate_images)
-2. Fires 5 PARALLEL requests to google/gemini-3-flash (vision)
-3. Each request returns structured JSON specs:
-   - quality_score (1-10)
-   - faces: count + positions
-   - clear_areas: available text placement zones
-   - dominant_colors: hex values
-   - objects: main recognizable objects
-   - recommendation: best layout suggestion for this image
-4. Returns all specs so the agent can pick the best image AND
-   craft precise editing prompts for create_post_image_gemini.
+SINGLE CALL FLOW (v3):
+1. Receives up to 5 image URLs + social_posts.md content
+2. Fires ONE single call to Gemini Flash with ALL images in the same message
+3. Gemini sees all images side-by-side and:
+   - Picks the BEST image directly (no scoring guesswork)
+   - Writes ONE complete editing_prompt for the chosen image
+   - Returns quality notes for all images so we know why it picked
 """
 
 import base64
 import io
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 from pathlib import Path
 
 import requests
@@ -26,43 +21,63 @@ from langchain_core.tools import tool
 from PIL import Image
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_MANIFEST_FILE = Path("output") / "candidate_images" / "manifest.json"
-_MODEL         = "google/gemini-3-flash"   # vision model via Vercel AI Gateway
+_MANIFEST_FILE    = Path("output") / "candidate_images" / "manifest.json"
+_MODEL            = "google/gemini-3-flash"
+_BRAND_STYLE_FILE = Path(__file__).parent.parent.parent / "brand_style.md"
 
-_ANALYSIS_PROMPT = """Analyze this news photo for social media post editing. Return ONLY valid JSON.
+# Load brand style once at module level — fallback if file missing
+try:
+    _BRAND_STYLE = _BRAND_STYLE_FILE.read_text(encoding="utf-8")
+except FileNotFoundError:
+    _BRAND_STYLE = (
+        "THE ECHO brand: Primary #1A5C5A (teal), Highlight #C9A227 (mustard), "
+        "Text #FFFFFF. Watermark: theecho.news.tv bottom-right. "
+        "Brand mark: THE ECHO top-left teal badge."
+    )
+    print(f"[analyze_images] WARNING: brand_style.md not found at {_BRAND_STYLE_FILE}. Using fallback.")
 
-{
-  "quality_score": <float 1.0-10.0, based on sharpness, lighting, composition, resolution>,
-  "resolution_ok": <true if image is ≥ 800px wide, else false>,
-  "faces": {
-    "count": <int>,
-    "positions": [<"top-left"|"top-center"|"top-right"|"center-left"|"center"|"center-right"|"bottom-left"|"bottom-center"|"bottom-right">],
-    "size": <"dominant (>50%)" | "medium (20-50%)" | "small (<20%)" | "none">
-  },
-  "clear_areas": [
-    {
-      "zone": <"top-left"|"top-center"|"top-right"|"left-strip"|"right-strip"|"bottom-band"|"center-overlay">,
-      "size_pct": <estimated % of frame this clear zone occupies>,
-      "usable_for_text": <true|false>
-    }
-  ],
-  "dominant_colors": [<"#rrggbb">, <"#rrggbb">, <"#rrggbb">],
-  "background": <"plain"|"simple"|"moderate"|"busy"|"very_busy">,
-  "objects": [<string: main recognizable objects, people, locations visible>],
-  "has_foreign_branding": <true if visible logos, chyrons, or text from other news outlets>,
-  "text_safe_zones": [<best zones for placing headline text, e.g., "top-left 35% sky area">],
-  "editing_recommendation": "<1-2 sentence creative suggestion: which zone for headline, gradient style, color to use from the image palette>"
-}
+# ── Single-call prompt (all images sent together) ─────────────────────────────
+_SINGLE_CALL_PROMPT = """You are THE ECHO news brand image editor.
+You are shown {n_images} news photos (labeled Image 1, Image 2, ... Image {n_images}).
+Compare them all and pick the SINGLE BEST one for a social media post.
 
-Be precise about clear areas — the social media editor NEEDS to know exactly where text can be placed without covering faces or busy backgrounds.
-Return ONLY the JSON object, no markdown fences."""
+## THE ECHO Brand Style Guide
+{brand_style}
+
+## Social Post Content (use this to craft the text layers)
+{post_content}
+
+## Your Task
+1. Compare all {n_images} images.
+2. Reject any with visible logos/chyrons from other news outlets.
+3. Pick the best remaining image (highest clarity, most text space, most visually impactful).
+4. Write a complete THE ECHO editing prompt for that image.
+
+Return ONLY valid JSON (no markdown fences, no extra text):
+{{
+  "chosen_image_index": <integer 1-{n_images}>,
+  "chosen_image_url": "<the URL of the chosen image>",
+  "selection_reason": "<1 sentence: why this image was chosen over the others>",
+  "rejected_images": [<list of image index integers that were rejected and why, e.g. {{"index": 2, "reason": "foreign branding"}}]],
+  "kicker": "<2-4 words SMALL CAPS — e.g. BREAKING NEWS, MARKET UPDATE, COURT RULING>",
+  "headline": "<max 10 words — hook line from the X post above>",
+  "spice_line": "<max 15 words — intriguing teaser NOT repeating the headline, from Instagram/Facebook post>",
+  "text_safe_zones": ["<precise areas in the chosen image free for text overlay>"],
+  "selected_style": "<Style 1|Style 2|Style 3|Style 4|Style 5|Style 6>",
+  "editing_prompt": "<COMPLETE ready-to-paste editing prompt: references exact hex colors from brand style, uses the text_safe_zones identified in the chosen image, all 3 text layers (kicker+headline+spice_line) with real text from above, THE ECHO badge top-left, theecho.news.tv watermark bottom-right, ends with preservation sentence from brand style guide>"
+}}
+
+Rules:
+- chosen_image_url must be the EXACT URL string shown in the image label below
+- Use REAL kicker/headline/spice_line from post content — no placeholder text
+- editing_prompt must be complete and ready to paste — agent will use it verbatim
+"""
 
 
-def _load_image_b64(url: str, max_px: int = 800) -> str | None:
+def _load_image_b64(url: str, max_px: int = 900) -> str | None:
     """Load image from disk manifest (or download) and return base64 JPEG."""
     raw = None
 
-    # Try manifest first
     if _MANIFEST_FILE.exists():
         try:
             manifest = json.loads(_MANIFEST_FILE.read_text(encoding="utf-8"))
@@ -72,7 +87,6 @@ def _load_image_b64(url: str, max_px: int = 800) -> str | None:
         except Exception:
             pass
 
-    # Fallback: download
     if raw is None:
         try:
             r = requests.get(
@@ -86,7 +100,6 @@ def _load_image_b64(url: str, max_px: int = 800) -> str | None:
             print(f"[analyze_images] Download failed for {url[:60]}: {e}")
             return None
 
-    # Resize to max_px for analysis (smaller = faster API call)
     try:
         img = Image.open(io.BytesIO(raw)).convert("RGB")
         w, h = img.size
@@ -94,48 +107,87 @@ def _load_image_b64(url: str, max_px: int = 800) -> str | None:
             scale = max_px / max(w, h)
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=80)
+        img.save(buf, format="JPEG", quality=85)
         return base64.b64encode(buf.getvalue()).decode()
     except Exception as e:
         print(f"[analyze_images] Image encode failed: {e}")
         return None
 
 
-def _analyze_single(index: int, url: str) -> dict:
-    """Send one image to Gemini Flash for analysis. Called in parallel."""
-    result = {
-        "index": index,
-        "url": url,
-        "error": None,
-        "specs": None,
-    }
+# ── LangChain Tool ─────────────────────────────────────────────────────────────
+@tool(parse_docstring=True)
+def analyze_images_gemini(image_urls: list[str], post_content: str = "") -> str:
+    """Send all candidate images in ONE call to Gemini Flash for comparison + editing prompt.
 
-    # Load + encode image
-    b64 = _load_image_b64(url)
-    if not b64:
-        result["error"] = "Could not load image"
-        return result
+    SINGLE CALL: All images are sent together in one API request.
+    Gemini sees all images simultaneously and:
+    - Directly picks the BEST image (not just highest score — actual comparison)
+    - Rejects any with foreign branding
+    - Writes ONE complete, ready-to-paste editing_prompt for the chosen image
+    - Extracts kicker, headline, spice_line from your actual post text
 
-    # Call Vercel AI Gateway
+    You MUST pass post_content (read_file("/social_posts.md") output) so Gemini
+    can derive real text layers from your actual posts.
+
+    Args:
+        image_urls: List of 2-5 image URLs to compare. Must be URLs returned by
+                    fetch_images_brave and viewed in view_candidate_images.
+        post_content: Full text of /social_posts.md. Gemini uses this to extract
+                      kicker, headline, spice_line and pick the correct brand style.
+
+    Returns:
+        The chosen image URL, selection reason, and a complete editing_prompt
+        ready to paste verbatim into create_post_image_gemini.
+    """
+    urls = image_urls[:5]
+    if not urls:
+        return "No image URLs provided."
+
+    print(f"[analyze_images_gemini] Loading {len(urls)} images for single Gemini call...")
+
+    # Load all images as base64
+    loaded = []
+    for i, url in enumerate(urls, start=1):
+        b64 = _load_image_b64(url)
+        if b64:
+            loaded.append({"index": i, "url": url, "b64": b64})
+        else:
+            print(f"[analyze_images] Skipped Image {i} — could not load: {url[:60]}")
+
+    if not loaded:
+        return "Failed to load any images. Check URLs or network connection."
+
+    print(f"[analyze_images_gemini] Sending {len(loaded)} images in ONE call to {_MODEL}...")
+
+    # Build the content array: one image_url block per image, labelled, then text prompt
+    content = []
+    for item in loaded:
+        # Label each image so Gemini can reference them by number and URL
+        content.append({
+            "type": "text",
+            "text": f"Image {item['index']} (URL: {item['url']}):"
+        })
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{item['b64']}"}
+        })
+
+    # Final instruction text with brand style + post content injected
+    prompt_text = _SINGLE_CALL_PROMPT.format(
+        n_images=len(loaded),
+        brand_style=_BRAND_STYLE,
+        post_content=post_content or "(not provided — use generic news kicker/headline/spice)",
+    )
+    content.append({"type": "text", "text": prompt_text})
+
     api_key  = os.environ.get("AI_GATEWAY_API_KEY", "")
     base_url = "https://ai-gateway.vercel.sh/v1"
 
     payload = {
         "model": _MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
-                    },
-                    {"type": "text", "text": _ANALYSIS_PROMPT},
-                ],
-            }
-        ],
-        "temperature": 0.0,
-        "max_tokens": 2048,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.1,
+        "max_tokens": 3000,
     }
 
     try:
@@ -146,15 +198,12 @@ def _analyze_single(index: int, url: str) -> dict:
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=60,
+            timeout=120,
         )
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"].strip()
 
-        # ── Robust JSON extraction ───────────────────────────────────────────────────────────────────
-        import re
-
-        # 1. Strip ```json ... ``` or ``` ... ``` fences
+        # Robust JSON extraction
         if "```" in text:
             fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
             if fence:
@@ -163,117 +212,58 @@ def _analyze_single(index: int, url: str) -> dict:
                 text = re.sub(r"^```(?:json)?\s*", "", text)
                 text = re.sub(r"\s*```$", "", text)
 
-        # 2. Extract outermost { } block if still not clean
         if not text.startswith("{"):
             brace = re.search(r"\{.*\}", text, re.DOTALL)
             if brace:
                 text = brace.group(0)
 
-        specs = json.loads(text)
-        result["specs"] = specs
+        result = json.loads(text)
+
     except json.JSONDecodeError as e:
-        result["error"] = f"JSON parse error (response may be truncated): {e} | Raw: {text[:300]}"
-        print(f"[analyze_images] Full raw for debug:\n{text[:800]}")
+        return f"❌ Gemini returned invalid JSON: {e}\nRaw response (first 500 chars): {text[:500]}"
     except Exception as e:
-        result["error"] = str(e)
+        return f"❌ API call failed: {e}"
 
-    return result
+    # Format readable output for the agent
+    chosen_idx   = result.get("chosen_image_index", "?")
+    chosen_url   = result.get("chosen_image_url", "?")
+    reason       = result.get("selection_reason", "")
+    rejected     = result.get("rejected_images", [])
+    style        = result.get("selected_style", "?")
+    kicker       = result.get("kicker", "?")
+    headline     = result.get("headline", "?")
+    spice        = result.get("spice_line", "?")
+    text_zones   = result.get("text_safe_zones", [])
+    editing_prompt = result.get("editing_prompt", "")
 
+    lines = [
+        f"📊 IMAGE ANALYSIS — {len(loaded)} images compared in ONE Gemini call",
+        "=" * 70,
+        f"\n✅ CHOSEN: Image {chosen_idx}",
+        f"   URL: {chosen_url}",
+        f"   Reason: {reason}",
+    ]
 
-# ── LangChain Tool ────────────────────────────────────────────────────────────
-@tool(parse_docstring=True)
-def analyze_images_gemini(image_urls: list[str]) -> str:
-    """Analyze up to 5 candidate images in PARALLEL using Gemini Flash vision.
+    if rejected:
+        lines.append("\n❌ Rejected images:")
+        for r in rejected:
+            lines.append(f"   Image {r.get('index', '?')}: {r.get('reason', '?')}")
 
-    Sends each image to google/gemini-3-flash simultaneously and returns
-    detailed composition specs for each image:
-    - Image quality score (1-10)
-    - Face count and positions
-    - Available clear areas for text placement
-    - Dominant colors (hex)
-    - Background complexity
-    - Whether foreign branding/logos are present
-    - Specific text-safe zones with size estimates
-    - Creative editing recommendation
-
-    Use this AFTER view_candidate_images to pick your top 3-5 images,
-    then call this tool with those URLs to get specs for ALL of them
-    in parallel. Then pick the BEST image (highest quality + most text area)
-    and craft your editing_prompt using the exact specs returned.
-
-    Args:
-        image_urls: List of 2-5 image URLs to analyze in parallel.
-                    These must be URLs previously returned by fetch_images_brave
-                    and shown in view_candidate_images.
-
-    Returns:
-        Structured analysis of each image with quality scores, face positions,
-        clear text areas, and editing recommendations. Pick the image with
-        highest quality_score + has_foreign_branding=false + largest text_safe_zones.
-    """
-    urls = image_urls[:5]  # max 5
-    if not urls:
-        return "No image URLs provided."
-
-    print(f"[analyze_images_gemini] Analyzing {len(urls)} images in parallel via {_MODEL}...")
-
-    results = []
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = {pool.submit(_analyze_single, i + 1, url): url for i, url in enumerate(urls)}
-        for future in as_completed(futures):
-            results.append(future.result())
-
-    # Sort by original index
-    results.sort(key=lambda r: r["index"])
-
-    # Format output
-    lines = [f"📊 IMAGE ANALYSIS — {len(results)} images analyzed in parallel\n"]
-    lines.append("=" * 60)
-
-    for r in results:
-        lines.append(f"\n🖼️  Image {r['index']}: {r['url'][:80]}")
-        if r["error"]:
-            lines.append(f"   ❌ Error: {r['error']}")
-            continue
-
-        specs = r["specs"]
-        score = specs.get("quality_score", "?")
-        branding = specs.get("has_foreign_branding", False)
-        faces = specs.get("faces", {})
-        clear = specs.get("clear_areas", [])
-        colors = specs.get("dominant_colors", [])
-        bg = specs.get("background", "?")
-        recommendation = specs.get("editing_recommendation", "")
-        text_zones = specs.get("text_safe_zones", [])
-
-        brand_tag = "⚠️ HAS FOREIGN BRANDING — REJECT" if branding else "✅ Clean (no foreign branding)"
-        lines.append(f"   Quality Score:    {score}/10")
-        lines.append(f"   Branding:         {brand_tag}")
-        lines.append(f"   Background:       {bg}")
-        lines.append(f"   Faces:            {faces.get('count', 0)} face(s) — {faces.get('size', 'none')} — positions: {faces.get('positions', [])}")
-        lines.append(f"   Dominant Colors:  {', '.join(colors)}")
-
-        if clear:
-            lines.append("   Clear Areas:")
-            for zone in clear:
-                usable = "✅" if zone.get("usable_for_text") else "❌"
-                lines.append(f"     {usable} {zone.get('zone')} — ~{zone.get('size_pct', '?')}% of frame")
-
-        if text_zones:
-            lines.append(f"   Best Text Zones:  {' | '.join(text_zones)}")
-
-        if recommendation:
-            lines.append(f"   💡 Recommendation: {recommendation}")
-
-    lines.append("\n" + "=" * 60)
-    lines.append(
-        "\n📌 SELECTION GUIDE:\n"
-        "  1. REJECT any image with has_foreign_branding=true\n"
-        "  2. Pick highest quality_score among clean images\n"
-        "  3. Prefer images with large text_safe_zones\n"
-        "  4. Use the 'editing_recommendation' to build your editing_prompt\n"
-        "  5. Reference exact color hex codes and zone names in your prompt\n"
-        "  6. Then call create_post_image_gemini with the chosen URL and your crafted prompt"
-    )
+    lines += [
+        f"\n🎨 Style:      {style}",
+        f"   Kicker:     {kicker}",
+        f"   Headline:   {headline}",
+        f"   Spice Line: {spice}",
+        f"   Text Zones: {' | '.join(text_zones) if text_zones else 'not specified'}",
+        f"\n📋 EDITING PROMPT (paste verbatim into create_post_image_gemini):",
+        f"   {editing_prompt}",
+        "\n" + "=" * 70,
+        "\n📌 NEXT STEP:",
+        f"   create_post_image_gemini(",
+        f'       image_url="{chosen_url}",',
+        f'       headline_text="{headline}",',
+        f"       editing_prompt=<editing prompt shown above>",
+        f"   )",
+    ]
 
     return "\n".join(lines)
