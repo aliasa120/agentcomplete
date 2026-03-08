@@ -24,4 +24,6 @@ deep-agents-ui-main/*.tsbuildinfo
 
 # Misc
 output/
+threads/
+test/
 *.ipynb

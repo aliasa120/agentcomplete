@@ -1,23 +1,27 @@
 # Original News Input
 
 **Date:** 2026-03-08
-**Title:** Punjab decides to clear flood zones, approves proposal for 17 mini dams - Dunya News
-**Snippet:** Punjab decides to clear flood zones, approves proposal for 17 mini dams Dunya News
+**Title:** PM Shehbaz orders crackdown on petrol hoarding; directs real-time monitoring of stocks - Business Recorder
+**Snippet:** PM Shehbaz orders crackdown on petrol hoarding; directs real-time monitoring of stocks Business Recorder
 
 ## Gap Analysis
-- WHO: ❌ Missing (Which minister/official approved? Who proposed?)
-- WHAT: ✅ Already known (clearing flood zones, approving 17 mini dams)
-- WHEN: ❌ Missing (When was this approved?)
-- WHERE: ✅ Punjab province mentioned
-- WHY: ❌ Missing (Background on floods? Why now?)
-- OFFICIAL SOURCES: ❌ Missing (Government statement details)
-- REACTIONS: ❌ Missing (Any reactions?)
-- FACTS: ❌ Missing (Locations, cost, timeline for dams)
+
+| Category | Status | Details |
+|----------|--------|---------|
+| WHO | ✅ | PM Shehbaz (main actor) |
+| WHAT | ✅ | Crackdown on petrol hoarding, real-time monitoring of stocks |
+| WHEN | ❌ | Exact date of the order |
+| WHERE | ✅ | Pakistan (implied) |
+| WHY | ❌ | Context - is there a fuel shortage/crisis? |
+| OFFICIAL SOURCES | ❌ | Exact quotes from PM's statement |
+| REACTIONS | ❌ | Reactions from oil companies, dealers, opposition |
+| FACTS | ❌ | Current fuel situation, hoarding statistics |
+
+**Snippet Density Score:** 3/8 answered → **4 targets**
 
 ## Research Targets
-1. Find the name and position of the Punjab minister/official who approved the 17 mini dams proposal
-2. Find the exact date when Punjab Cabinet approved this decision
-3. Find specific locations/regions where the 17 mini dams will be constructed
-4. Find cost estimate and completion timeline for the mini dams project
-5. Find details about flood zones being cleared (which areas, why, affected populations)
-6. Find any official statements or quotes from Punjab government officials about this decision
+
+1. Find exact date when PM Shehbaz Sharif ordered the petrol hoarding crackdown
+2. Find details on the real-time fuel stock monitoring system - what mechanism, app, or platform
+3. Find background context - is Pakistan facing a fuel/petrol shortage crisis?
+4. Find official quotes from PM Shehbaz or government spokespersons about the crackdown

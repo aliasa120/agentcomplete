@@ -73,7 +73,7 @@ Convert each ❌ gap into one specific, numbered target.
 ## Step 4 — Save to `/news_input.md`
 
 ```python
-write_file("/news_input.md", """# Original News Input
+overwrite_file("/news_input.md", """# Original News Input
 
 **Date:** [today's date]
 **Title:** [exact title — copy-paste]

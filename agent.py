@@ -18,11 +18,11 @@ from research_agent.tools import (
     create_post_image_gemini,
     fetch_images_brave,
     linkup_search,
+    overwrite_file,
     tavily_extract,
     think_tool,
     view_candidate_images,
     analyze_images_gemini,
-    overwrite_file,
 )
 from research_agent.tools.save_to_supabase import save_posts_to_supabase
 
@@ -37,11 +37,16 @@ model = ChatOpenAI(
     temperature=0.45,
 )
 
-# Use FilesystemBackend so the agent's read_file / write_file tools and the
-# SkillsMiddleware all operate on real files in the project directory.
-# virtual_mode=True means all paths are anchored to root_dir:
+# Use FilesystemBackend so the agent's read_file tool and SkillsMiddleware can
+# resolve virtual paths to real files on disk:
 #   /skills/planning/SKILL.md  →  <project_root>/skills/planning/SKILL.md
-#   /news_input.md             →  <project_root>/news_input.md
+#
+# NOTE: news_input.md and social_posts.md are written via the custom overwrite_file
+# tool (research_agent/tools/overwrite_file.py), which uses the LangGraph thread_id
+# from RunnableConfig to write each run's files to an isolated subdirectory:
+#   /news_input.md   →  <project_root>/threads/<thread_id>/news_input.md
+#   /social_posts.md →  <project_root>/threads/<thread_id>/social_posts.md
+# This prevents parallel runs from overwriting each other's files.
 _PROJECT_ROOT = Path(__file__).parent
 backend = FilesystemBackend(root_dir=_PROJECT_ROOT, virtual_mode=True)
 
@@ -63,5 +68,3 @@ agent = create_deep_agent(
     ],
     system_prompt=INSTRUCTIONS,
 )
-
-
